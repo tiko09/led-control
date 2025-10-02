@@ -100,17 +100,48 @@ class ArtNetServer:
     def _apply_dmx(self, data: bytes) -> int:
         updated = 0
         cpl = self.channels_per_led
+        if self.log.isEnabledFor(logging.DEBUG):
+            per_led_lines = []
+            channel_pairs = []  # kompakte Liste kanal=wert
         for led_index in range(self.led_count):
             base = self.channel_offset + led_index * cpl
             if base >= len(data):
                 break
-            # Kanäle holen (fehlende = 0)
+
+            # Einlesen (fehlende = 0)
             r = data[base] if base < len(data) else 0
-            g = data[base+1] if base+1 < len(data) else 0
-            b = data[base+2] if base+2 < len(data) else 0
-            w = 0
-            if cpl >= 4:
-                w = data[base+3] if base+3 < len(data) else 0
+            g = data[base + 1] if base + 1 < len(data) else 0
+            b = data[base + 2] if base + 2 < len(data) else 0
+            w = data[base + 3] if cpl >= 4 and base + 3 < len(data) else 0
+
             self.set_led_rgbw(led_index, r, g, b, w)
             updated += 1
+
+            if self.log.isEnabledFor(logging.DEBUG):
+                # DMX Kanäle 1-basiert ausgeben
+                ch_r = base + 1
+                ch_g = base + 2
+                ch_b = base + 3
+                ch_w = base + 4
+                if cpl >= 4:
+                    per_led_lines.append(
+                        f"LED{led_index}: R(ch{ch_r})={r} G(ch{ch_g})={g} B(ch{ch_b})={b} W(ch{ch_w})={w}"
+                    )
+                    channel_pairs.extend((
+                        f"{ch_r}={r}", f"{ch_g}={g}", f"{ch_b}={b}", f"{ch_w}={w}"
+                    ))
+                else:
+                    per_led_lines.append(
+                        f"LED{led_index}: R(ch{ch_r})={r} G(ch{ch_g})={g} B(ch{ch_b})={b}"
+                    )
+                    channel_pairs.extend((
+                        f"{ch_r}={r}", f"{ch_g}={g}", f"{ch_b}={b}"
+                    ))
+
+        if self.log.isEnabledFor(logging.DEBUG) and updated:
+            # Detailliert pro LED
+            for line in per_led_lines:
+                self.log.debug(line)
+            # Kompakte Zeile
+            self.log.debug("DMX Werte kompakt: %s", ", ".join(channel_pairs))
         return updated
