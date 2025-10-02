@@ -175,3 +175,36 @@ class LEDController:
         except Exception as e:
             msg = traceback.format_exception(type(e), e, e.__traceback__)
             print(f'Error during remote rendering: {msg}')
+
+    def set_pixel_rgbw(self, index, r, g, b, w=0, render=True):
+        """
+        Setzt einen einzelnen Pixel (RGB oder RGBW) unmittelbar.
+        r,g,b,w: 0..255
+        Wenn das Strip kein W-Kanal hat, wird w ignoriert.
+        Bei render=True wird direkt ws2811_render() aufgerufen.
+        """
+        if not (0 <= index < self._count):
+            return False
+        if driver.is_raspberrypi():
+            # Weißkanal nur wenn vorhanden
+            if not self._has_white:
+                w = 0
+            color = driver.pack_rgbw(r & 0xFF, g & 0xFF, b & 0xFF, w & 0xFF)
+            driver.ws2811_led_set(self._channel, index, color)
+            if render:
+                driver.ws2811_render(self._leds)
+            return True
+        else:
+            # Fallback: über bestehende set_range (normalisiert 0..1)
+            self.set_range(
+                [(r/255.0, g/255.0, b/255.0)],  # ein Pixel
+                index,
+                index + 1,
+                0xFFFFFF,        # keine Korrekturänderung
+                1.0,             # Sättigung
+                1.0,             # Helligkeit
+                animfunctions.ColorMode.rgb,
+                TargetMode.local,
+                ''
+            )
+            return True

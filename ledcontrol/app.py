@@ -179,8 +179,7 @@ def create_app(led_count,
     led_state = [(0, 0, 0, 0) for _ in range(LED_COUNT)]  # (r,g,b,w)
 
     def push_led_to_hardware(index: int, r: int, g: int, b: int, w: int):
-        # TODO: Hardware-Ausgabe implementieren (Batch + Flush)
-        pass
+        controller.set_pixel_rgbw(index, r, g, b, w, render=True)
 
     def set_led_rgbw(index: int, r: int, g: int, b: int, w: int):
         if 0 <= index < len(led_state):
