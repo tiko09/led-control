@@ -18,6 +18,9 @@ import ledcontrol.animationfunctions as animfunctions
 import ledcontrol.colorpalettes as colorpalettes
 import ledcontrol.utils as utils
 
+import logging
+logging.basicConfig(level=logging.DEBUG)
+
 def create_app(led_count,
                config_file,
                pixel_mapping_file,
@@ -398,6 +401,7 @@ def create_app(led_count,
 
         # Server neu starten / stoppen
         if artnet_server:
+            app.logger.debug("Stoppe bestehenden ArtNetServer vor Neustart")
             artnet_server.stop()
             artnet_server = None
         if settings["enable_artnet"]:
@@ -408,6 +412,8 @@ def create_app(led_count,
                 channel_offset=settings["artnet_channel_offset"],
             )
             artnet_server.start()
+            app.logger.debug("ArtNetServer (neu) aktiv: universe=%d offset=%d",
+                             settings["artnet_universe"], settings["artnet_channel_offset"])
         save_settings()  # angepasst, damit ArtNet-Settings persistieren
         return {"status": "ok"}
 
