@@ -96,7 +96,7 @@ class ArtNetServer:
             self.log.debug("Empfangen ArtDMX von %s universe=%d seq=%d length=%d",
                            addr, universe, seq, length)
             self._queue.put((universe, data))
-            self.poll()  # Optional sofort anwenden
+            #self.poll()  # Optional sofort anwenden
 
     def _apply_dmx(self, data: bytes) -> int:
         updated = 0
