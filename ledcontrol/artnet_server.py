@@ -112,6 +112,6 @@ class ArtNetServer:
             )
             self._fps_last_report = now
             # Optional: Für gleitenden Durchschnitt statt total neu starten:
-            # self._fps_start = now
-            # self._fps_count = 0
+            self._fps_start = now
+            self._fps_count = 0
         return (len(data) // self.channels_per_led)
