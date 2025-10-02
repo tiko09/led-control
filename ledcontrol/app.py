@@ -401,6 +401,10 @@ def create_app(led_count,
                 channels_per_led=ARTNET_CHANNELS_PER_LED,
             )
             artnet_server.start()
+        else:
+            app.logger.debug("ArtNet deaktiviert")
+            controller.clear_leds()
+            controller.begin_animation_thread()
         save_settings()
         return {"status": "ok"}
 
