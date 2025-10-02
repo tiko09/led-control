@@ -5,6 +5,7 @@ import threading
 import logging
 from queue import Queue, Empty
 from typing import Callable, Optional
+import time  # (oben ergänzen)
 
 ARTNET_PORT = 6454
 ARTNET_HEADER = b'Art-Net\x00'
@@ -25,6 +26,10 @@ class ArtNetServer:
         self._running = threading.Event()
         self._queue: Queue = Queue()
         self.log = logging.getLogger("artnet")
+        self._fps_start = time.time()
+        self._fps_last_report = self._fps_start
+        self._fps_count = 0
+        self._fps_report_interval = 10.0  # Sekunden
 
     def start(self):
         if self._thread and self._thread.is_alive():
@@ -92,4 +97,21 @@ class ArtNetServer:
 
     def _apply_dmx(self, data: bytes) -> int:
         self.set_led_rgbw(data,0)
+
+                # FPS-Messung
+        self._fps_count += 1
+        now = time.time()
+        elapsed = now - self._fps_last_report
+        if elapsed >= self._fps_report_interval:
+            total_elapsed = now - self._fps_start
+            avg_fps_total = self._fps_count / total_elapsed if total_elapsed > 0 else 0.0
+            interval_fps = self._fps_count / total_elapsed if total_elapsed > 0 else 0.0  # alternativ: (self._fps_count_interval/elapsed)
+            self.log.info(
+                "ArtNet FPS: total_frames=%d total_time=%.1fs avg_fps=%.2f (Intervall %.0fs)",
+                self._fps_count, total_elapsed, avg_fps_total, self._fps_report_interval
+            )
+            self._fps_last_report = now
+            # Optional: Für gleitenden Durchschnitt statt total neu starten:
+            # self._fps_start = now
+            # self._fps_count = 0
         return (len(data) // self.channels_per_led)
