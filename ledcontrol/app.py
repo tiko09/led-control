@@ -184,6 +184,7 @@ def create_app(led_count,
     def stop_current_animation():
         # Animation wirklich pausieren
         controller.end_animation()
+        controller.clear_leds()
         app.logger.debug("Animation gestoppt (ArtNet aktiv)")
 
     @app.before_request
