@@ -11,13 +11,14 @@ ARTNET_HEADER = b'Art-Net\x00'
 OPCODE_ART_DMX = 0x5000  # little endian in packet
 
 class ArtNetServer:
-    def __init__(self, set_led_rgb: Callable[[int, int, int, int], None],
-                 led_count: int, universe: int = 0, channel_offset: int = 0,
-                 host: str = "0.0.0.0"):
-        self.set_led_rgb = set_led_rgb
+    def __init__(self, set_led_rgbw, led_count: int,
+                 universe: int = 0, channel_offset: int = 0,
+                 channels_per_led: int = 4, host: str = "0.0.0.0"):
+        self.set_led_rgbw = set_led_rgbw
         self.led_count = led_count
         self.universe = universe
         self.channel_offset = channel_offset
+        self.channels_per_led = channels_per_led
         self.host = host
         self._sock: Optional[socket.socket] = None
         self._thread: Optional[threading.Thread] = None
@@ -97,13 +98,18 @@ class ArtNetServer:
 
     def _apply_dmx(self, data: bytes) -> int:
         updated = 0
+        cpl = self.channels_per_led
         for led_index in range(self.led_count):
-            base = self.channel_offset + led_index * 3
-            if base + 2 >= len(data):
+            base = self.channel_offset + led_index * cpl
+            if base >= len(data):
                 break
-            r = data[base]
-            g = data[base + 1]
-            b = data[base + 2]
-            self.set_led_rgb(led_index, r, g, b)
+            # Kanäle holen (fehlende = 0)
+            r = data[base] if base < len(data) else 0
+            g = data[base+1] if base+1 < len(data) else 0
+            b = data[base+2] if base+2 < len(data) else 0
+            w = 0
+            if cpl >= 4:
+                w = data[base+3] if base+3 < len(data) else 0
+            self.set_led_rgbw(led_index, r, g, b, w)
             updated += 1
         return updated

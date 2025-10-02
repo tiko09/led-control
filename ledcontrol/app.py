@@ -21,6 +21,9 @@ import ledcontrol.utils as utils
 import logging
 logging.basicConfig(level=logging.DEBUG)
 
+# Anzahl Kanäle/LED
+ARTNET_CHANNELS_PER_LED = 4  # RGBW
+
 def create_app(led_count,
                config_file,
                pixel_mapping_file,
@@ -171,11 +174,26 @@ def create_app(led_count,
 
     artnet_server = None
 
+    # LED State jetzt mit White
     try:
         led_state
     except NameError:
-        LED_COUNT = 100  # TODO: tatsächliche Anzahl
-        led_state = [(0, 0, 0)] * LED_COUNT
+        LED_COUNT = 100
+        led_state = [(0, 0, 0, 0)] * LED_COUNT  # (r, g, b, w)
+
+    def set_led_rgbw(index: int, r: int, g: int, b: int, w: int):
+        if 0 <= index < len(led_state):
+            led_state[index] = (r, g, b, w)
+            push_led_to_hardware(index, r, g, b, w)
+
+    def push_led_to_hardware(index, r, g, b, w):
+        # TODO: Hardware-Anpassung anpassen (RGBW schreiben)
+        pass
+
+    def stop_current_animation():
+        # TODO: Existierende Animations-Loop / Thread stoppen oder Flag setzen
+        settings["animation_enabled"] = False
+        app.logger.debug("Animation gestoppt wegen aktivem ArtNet-Modus")
 
     def set_led_rgb(index: int, r: int, g: int, b: int):
         if 0 <= index < len(led_state):
@@ -346,13 +364,22 @@ def create_app(led_count,
         hap_accessory.saturation.set_value(controller.get_settings()['global_saturation'] * 100.0)
 
     if settings.get("enable_artnet"):
+        stop_current_animation()
         artnet_server = ArtNetServer(
-            set_led_rgb=set_led_rgb,
+            set_led_rgbw=set_led_rgbw,
             led_count=len(led_state),
             universe=settings.get("artnet_universe", 0),
-            channel_offset=settings.get("artnet_channel_offset", 0)
+            channel_offset=settings.get("artnet_channel_offset", 0),
+            channels_per_led=ARTNET_CHANNELS_PER_LED
         )
         artnet_server.start()
+        app.logger.debug(
+            "ArtNetServer (neu) aktiv: universe=%d offset=%d cpl=%d max_leds_universe=%d",
+            settings["artnet_universe"],
+            settings["artnet_channel_offset"],
+            ARTNET_CHANNELS_PER_LED,
+            (512 - settings["artnet_channel_offset"]) // ARTNET_CHANNELS_PER_LED
+        )
 
     def periodic_tasks():
         if artnet_server:
@@ -405,15 +432,22 @@ def create_app(led_count,
             artnet_server.stop()
             artnet_server = None
         if settings["enable_artnet"]:
+            stop_current_animation()
             artnet_server = ArtNetServer(
-                set_led_rgb=set_led_rgb,
+                set_led_rgbw=set_led_rgbw,
                 led_count=len(led_state),
                 universe=settings["artnet_universe"],
                 channel_offset=settings["artnet_channel_offset"],
+                channels_per_led=ARTNET_CHANNELS_PER_LED,
             )
             artnet_server.start()
-            app.logger.debug("ArtNetServer (neu) aktiv: universe=%d offset=%d",
-                             settings["artnet_universe"], settings["artnet_channel_offset"])
+            app.logger.debug(
+                "ArtNetServer (neu) aktiv: universe=%d offset=%d cpl=%d max_leds_universe=%d",
+                settings["artnet_universe"],
+                settings["artnet_channel_offset"],
+                ARTNET_CHANNELS_PER_LED,
+                (512 - settings["artnet_channel_offset"]) // ARTNET_CHANNELS_PER_LED
+            )
         save_settings()  # angepasst, damit ArtNet-Settings persistieren
         return {"status": "ok"}
 
