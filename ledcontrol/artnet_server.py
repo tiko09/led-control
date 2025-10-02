@@ -90,5 +90,6 @@ class ArtNetServer:
                 addr, universe, seq, len(data), leds
             )
 
-    def _apply_dmx(self, data: bytes):
+    def _apply_dmx(self, data: bytes) -> int:
         self.set_led_rgbw(data,0)
+        return (len(data) // self.channels_per_led)
