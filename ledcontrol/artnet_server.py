@@ -53,22 +53,8 @@ class ArtNetServer:
         self.log.info("ArtNet Server gestoppt")
 
     def poll(self):
-        self.log.debug("Selfe poll")
-        applied = 0
-        while True:
-            try:
-                universe, data = self._queue.get_nowait()
-            except Empty:
-                break
-            if universe != self.universe:
-                self.log.debug("Ignoriere Paket für anderes Universe (%d != %d)",
-                               universe, self.universe)
-                continue
-            leds = self._apply_dmx(data)
-            self.log.debug("ArtNet Paket angewandt: universe=%d bytes=%d leds_updated=%d",
-                           universe, len(data), leds)
-            applied += 1
-        return applied
+        # Keine Funktion mehr nötig bei Direktverarbeitung – nur für Rückwärtskompatibilität
+        return 0
 
     def _run(self):
         while self._running.is_set():
@@ -78,6 +64,7 @@ class ArtNetServer:
                 if not self._running.is_set():
                     break
                 continue
+
             if not pkt.startswith(ARTNET_HEADER):
                 continue
             if len(pkt) < 18:
@@ -86,17 +73,22 @@ class ArtNetServer:
                 op_code = struct.unpack_from("<H", pkt, 8)[0]
                 if op_code != OPCODE_ART_DMX:
                     continue
-                # Sequence Byte
-                seq = pkt[12]
+                seq = pkt[12]                  # Sequence (optional Nutzung)
                 universe = struct.unpack_from("<H", pkt, 14)[0]
                 length = struct.unpack_from(">H", pkt, 16)[0]
                 data = pkt[18:18+length]
             except struct.error:
                 continue
-            self.log.debug("Empfangen ArtDMX von %s universe=%d seq=%d length=%d",
-                           addr, universe, seq, length)
-            self._queue.put((universe, data))
-            #self.poll()  # Optional sofort anwenden
+
+            if universe != self.universe:
+                self.log.debug("Ignoriere Paket anderes Universe (%d != %d)", universe, self.universe)
+                continue
+
+            leds = self._apply_dmx(data)
+            self.log.debug(
+                "ArtNet Direkt angewandt: from=%s universe=%d seq=%d bytes=%d leds_updated=%d",
+                addr, universe, seq, len(data), leds
+            )
 
     def _apply_dmx(self, data: bytes) -> int:
         updated = 0
