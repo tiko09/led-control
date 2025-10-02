@@ -11,7 +11,7 @@ from flask import Flask, render_template, request, jsonify
 from ledcontrol.animationcontroller import AnimationController
 from ledcontrol.ledcontroller import LEDController
 from ledcontrol.homekit import homekit_start
-from artnet_server import ArtNetServer
+from ledcontrol.artnet_server import ArtNetServer
 
 import ledcontrol.pixelmappings as pixelmappings
 import ledcontrol.animationfunctions as animfunctions
