@@ -11,6 +11,7 @@ from flask import Flask, render_template, request, jsonify
 from ledcontrol.animationcontroller import AnimationController
 from ledcontrol.ledcontroller import LEDController
 from ledcontrol.homekit import homekit_start
+from artnet_server import ArtNetServer
 
 import ledcontrol.pixelmappings as pixelmappings
 import ledcontrol.animationfunctions as animfunctions
@@ -156,6 +157,30 @@ def create_app(led_count,
             else:
                 print(f'Some saved settings at {filename} are out of date or invalid. Making a backup of the old file to {filename}.error and creating a new one with default settings.')
                 shutil.copyfile(filename, filename.with_suffix('.json.error'))
+
+    config_defaults = {
+        "enable_artnet": False,
+        "artnet_universe": 0,
+        "artnet_channel_offset": 0
+    }
+    for k, v in config_defaults.items():
+        settings.setdefault(k, v)
+
+    artnet_server = None
+
+    try:
+        led_state
+    except NameError:
+        LED_COUNT = 100  # TODO: tatsächliche Anzahl
+        led_state = [(0, 0, 0)] * LED_COUNT
+
+    def set_led_rgb(index: int, r: int, g: int, b: int):
+        if 0 <= index < len(led_state):
+            led_state[index] = (r, g, b)
+            push_led_to_hardware(index, r, g, b)
+
+    def push_led_to_hardware(index, r, g, b):
+        pass
 
     @app.before_request
     def before_request():
@@ -311,5 +336,40 @@ def create_app(led_count,
         hap_accessory.on.set_value(controller.get_settings()['on'])
         hap_accessory.brightness.set_value(controller.get_settings()['global_brightness'] * 100.0)
         hap_accessory.saturation.set_value(controller.get_settings()['global_saturation'] * 100.0)
+
+    if settings.get("enable_artnet"):
+        artnet_server = ArtNetServer(
+            set_led_rgb=set_led_rgb,
+            led_count=len(led_state),
+            universe=settings.get("artnet_universe", 0),
+            channel_offset=settings.get("artnet_channel_offset", 0)
+        )
+        artnet_server.start()
+
+    def periodic_tasks():
+        if artnet_server:
+            artnet_server.poll()
+
+    @app.route("/api/led/<int:index>", methods=["GET"])
+    def api_get_led(index):
+        if not (0 <= index < len(led_state)):
+            return {"error": "index out of range"}, 404
+        r, g, b = led_state[index]
+        return {"index": index, "r": r, "g": g, "b": b}
+
+    @app.route("/api/led/<int:index>", methods=["POST"])
+    def api_set_led(index):
+        if not (0 <= index < len(led_state)):
+            return {"error": "index out of range"}, 404
+        data = request.get_json(force=True)
+        r = int(data.get("r", 0)) & 0xFF
+        g = int(data.get("g", 0)) & 0xFF
+        b = int(data.get("b", 0)) & 0xFF
+        set_led_rgb(index, r, g, b)
+        return {"status": "ok"}
+
+    @app.route("/api/led", methods=["GET"])
+    def api_list_leds():
+        return [{"index": i, "r": c[0], "g": c[1], "b": c[2]} for i, c in enumerate(led_state)]
 
     return app

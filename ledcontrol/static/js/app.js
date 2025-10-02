@@ -10,6 +10,7 @@ import SliderNumberInput from './components/SliderNumberInput.js';
 import PaletteColorBar from './components/PaletteColorBar.js';
 import GroupControls from './components/GroupControls.js';
 import GroupConfig from './components/GroupConfig.js';
+import ArtnetConfig from './components/ArtnetConfig.js';
 
 await store.load();
 
@@ -28,5 +29,6 @@ app.component('slider-number-input', SliderNumberInput);
 app.component('palette-color-bar', PaletteColorBar);
 app.component('group-controls', GroupControls);
 app.component('group-config', GroupConfig);
+app.component('artnet-config', ArtnetConfig);
 app.use(router);
 app.mount('#main');
