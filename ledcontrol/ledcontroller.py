@@ -208,3 +208,62 @@ class LEDController:
                 ''
             )
             return True
+
+    def set_pixels_from_flat(self, data, start=0, render=True):
+        """
+        Setzt mehrere Pixel aus einem flachen Array.
+        Erwartetes Format:
+          - Bei Streifen mit White-Kanal: R1,G1,B1,W1,R2,G2,B2,W2,...
+          - Ohne White-Kanal: R1,G1,B1,R2,G2,B2,...
+        Parameter:
+          data   : Sequenz (list/tuple/bytes/bytearray) von ints 0..255
+          start  : Startpixel (0-basiert)
+          render : True -> am Ende frame rendern
+        Rückgabe:
+          Anzahl gesetzter Pixel
+        Unvollständige (restliche) Werte am Ende werden ignoriert.
+        """
+        if start < 0 or start >= self._count:
+            return 0
+        has_w = self._has_white
+        cpl = 4 if has_w else 3
+        length = len(data)
+        full_pixels = (length // cpl)
+        if full_pixels <= 0:
+            return 0
+        max_pixels = min(full_pixels, self._count - start)
+
+        if driver.is_raspberrypi():
+            # Direkt in den Hardware-Puffer schreiben
+            for i in range(max_pixels):
+                base = i * cpl
+                r = data[base] & 0xFF
+                g = data[base + 1] & 0xFF
+                b = data[base + 2] & 0xFF
+                w = data[base + 3] & 0xFF if has_w else 0
+                color = driver.pack_rgbw(r, g, b, w if has_w else 0)
+                driver.ws2811_led_set(self._channel, start + i, color)
+            if render:
+                driver.ws2811_render(self._leds)
+        else:
+            # Fallback: in float-Pixel-Liste umwandeln und einmal set_range
+            pixels = []
+            for i in range(max_pixels):
+                base = i * cpl
+                r = data[base] / 255.0
+                g = data[base + 1] / 255.0
+                b = data[base + 2] / 255.0
+                pixels.append((r, g, b))
+            # Korrektur/Sättigung/Helligkeit neutral halten
+            self.set_range(pixels,
+                           start,
+                           start + max_pixels,
+                           0xFFFFFF,
+                           1.0,
+                           1.0,
+                           animfunctions.ColorMode.rgb,
+                           TargetMode.local,
+                           '')
+            if render:
+                self.render()
+        return max_pixels

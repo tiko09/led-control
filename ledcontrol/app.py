@@ -178,25 +178,8 @@ def create_app(led_count,
     LED_COUNT = led_count  # tatsächliche Anzahl aus Mapping
     led_state = [(0, 0, 0, 0) for _ in range(LED_COUNT)]  # (r,g,b,w)
 
-    def push_led_to_hardware(index: int, r: int, g: int, b: int, w: int):
-        #app.logger.debug("Push LED to hardware: index=%d r=%d g=%d b=%d w=%d", index, r, g, b, w)
-        #only render on update of last LED to reduce SPI traffic
-        if index == 127:
-            app.logger.debug("Render LED to hardware: index=%d r=%d g=%d b=%d w=%d", index, r, g, b, w)
-            leds.set_pixel_rgbw(index, r, g, b, w, render=True)
-        else:   
-            leds.set_pixel_rgbw(index, r, g, b, w, render=False)
-
-    def set_led_rgbw(index: int, r: int, g: int, b: int, w: int):
-        if 0 <= index < len(led_state):
-            led_state[index] = (r, g, b, w)
-            push_led_to_hardware(index, r, g, b, w)
-
-    def set_led_rgb(index: int, r: int, g: int, b: int):
-        # Behalte vorhandenes W
-        if 0 <= index < len(led_state):
-            _, _, _, w = led_state[index]
-            set_led_rgbw(index, r, g, b, w)
+    def set_led(data: bytes, index: int):
+        leds.set_pixels_from_flat(data, index)
 
     def stop_current_animation():
         # Animation wirklich pausieren
@@ -373,7 +356,7 @@ def create_app(led_count,
                 LED_COUNT, max_leds_universe
             )
         artnet_server = ArtNetServer(
-            set_led_rgbw=set_led_rgbw,
+            set_led_rgbw=set_led,
             led_count=len(led_state),
             universe=settings.get("artnet_universe", 0),
             channel_offset=settings.get("artnet_channel_offset", 0),
@@ -387,33 +370,6 @@ def create_app(led_count,
             ARTNET_CHANNELS_PER_LED,
             (512 - settings["artnet_channel_offset"]) // ARTNET_CHANNELS_PER_LED
         )
-
-    # LED API korrigieren:
-    @app.route("/api/led/<int:index>", methods=["GET"])
-    def api_get_led(index):
-        if not (0 <= index < len(led_state)):
-            return {"error": "index out of range"}, 404
-        r, g, b, w = led_state[index]
-        return {"index": index, "r": r, "g": g, "b": b, "w": w}
-
-    @app.route("/api/led/<int:index>", methods=["POST"])
-    def api_set_led(index):
-        if not (0 <= index < len(led_state)):
-            return {"error": "index out of range"}, 404
-        data = request.get_json(force=True)
-        r = int(data.get("r", 0)) & 0xFF
-        g = int(data.get("g", 0)) & 0xFF
-        b = int(data.get("b", 0)) & 0xFF
-        w = int(data.get("w", led_state[index][3])) & 0xFF
-        set_led_rgbw(index, r, g, b, w)
-        return {"status": "ok"}
-
-    @app.route("/api/led", methods=["GET"])
-    def api_list_leds():
-        return [
-            {"index": i, "r": c[0], "g": c[1], "b": c[2], "w": c[3]}
-            for i, c in enumerate(led_state)
-        ]
 
     # ArtNet POST (Kapazität prüfen nach Änderung):
     @app.post("/api/artnet")
@@ -438,7 +394,7 @@ def create_app(led_count,
                     len(led_state), max_leds_universe
                 )
             artnet_server = ArtNetServer(
-                set_led_rgbw=set_led_rgbw,
+                set_led_rgbw=set_led,
                 led_count=len(led_state),
                 universe=settings["artnet_universe"],
                 channel_offset=settings["artnet_channel_offset"],

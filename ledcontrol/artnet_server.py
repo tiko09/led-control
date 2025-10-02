@@ -90,21 +90,5 @@ class ArtNetServer:
                 addr, universe, seq, len(data), leds
             )
 
-    def _apply_dmx(self, data: bytes) -> int:
-        updated = 0
-        cpl = self.channels_per_led
-        for led_index in range(self.led_count):
-            base = self.channel_offset + led_index * cpl
-            if base >= len(data):
-                break
-
-            # Einlesen (fehlende = 0)
-            r = data[base] if base < len(data) else 0
-            g = data[base + 1] if base + 1 < len(data) else 0
-            b = data[base + 2] if base + 2 < len(data) else 0
-            w = data[base + 3] if cpl >= 4 and base + 3 < len(data) else 0
-
-            self.set_led_rgbw(led_index, r, g, b, w)
-            updated += 1
-
-        return updated
+    def _apply_dmx(self, data: bytes):
+        self.set_led_rgbw(data,0)
