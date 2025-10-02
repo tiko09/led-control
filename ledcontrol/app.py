@@ -174,34 +174,29 @@ def create_app(led_count,
 
     artnet_server = None
 
-    # LED State jetzt mit White
-    try:
-        led_state
-    except NameError:
-        LED_COUNT = 100
-        led_state = [(0, 0, 0, 0)] * LED_COUNT  # (r, g, b, w)
+    # Nach Laden der settings:
+    LED_COUNT = led_count  # tatsächliche Anzahl aus Mapping
+    led_state = [(0, 0, 0, 0) for _ in range(LED_COUNT)]  # (r,g,b,w)
+
+    def push_led_to_hardware(index: int, r: int, g: int, b: int, w: int):
+        # TODO: Hardware-Ausgabe implementieren (Batch + Flush)
+        pass
 
     def set_led_rgbw(index: int, r: int, g: int, b: int, w: int):
         if 0 <= index < len(led_state):
             led_state[index] = (r, g, b, w)
             push_led_to_hardware(index, r, g, b, w)
 
-    def push_led_to_hardware(index, r, g, b, w):
-        # TODO: Hardware-Anpassung anpassen (RGBW schreiben)
-        pass
+    def set_led_rgb(index: int, r: int, g: int, b: int):
+        # Behalte vorhandenes W
+        if 0 <= index < len(led_state):
+            _, _, _, w = led_state[index]
+            set_led_rgbw(index, r, g, b, w)
 
     def stop_current_animation():
-        # TODO: Existierende Animations-Loop / Thread stoppen oder Flag setzen
-        settings["animation_enabled"] = False
-        app.logger.debug("Animation gestoppt wegen aktivem ArtNet-Modus")
-
-    def set_led_rgb(index: int, r: int, g: int, b: int):
-        if 0 <= index < len(led_state):
-            led_state[index] = (r, g, b)
-            push_led_to_hardware(index, r, g, b)
-
-    def push_led_to_hardware(index, r, g, b):
-        pass
+        # Animation wirklich pausieren
+        controller.update_settings({'on': False})
+        app.logger.debug("Animation gestoppt (ArtNet aktiv)")
 
     @app.before_request
     def before_request():
@@ -363,8 +358,15 @@ def create_app(led_count,
         hap_accessory.brightness.set_value(controller.get_settings()['global_brightness'] * 100.0)
         hap_accessory.saturation.set_value(controller.get_settings()['global_saturation'] * 100.0)
 
+    # Beim Start ArtNet (Warnung Kapazität):
     if settings.get("enable_artnet"):
         stop_current_animation()
+        max_leds_universe = (512 - settings.get("artnet_channel_offset", 0)) // ARTNET_CHANNELS_PER_LED
+        if LED_COUNT > max_leds_universe:
+            app.logger.warning(
+                "LED_COUNT (%d) > DMX Universe Kapazität (%d) -> Rest ignoriert",
+                LED_COUNT, max_leds_universe
+            )
         artnet_server = ArtNetServer(
             set_led_rgbw=set_led_rgbw,
             led_count=len(led_state),
@@ -374,7 +376,7 @@ def create_app(led_count,
         )
         artnet_server.start()
         app.logger.debug(
-            "ArtNetServer (neu) aktiv: universe=%d offset=%d cpl=%d max_leds_universe=%d",
+            "ArtNetServer aktiv: universe=%d offset=%d cpl=%d max_leds_universe=%d",
             settings["artnet_universe"],
             settings["artnet_channel_offset"],
             ARTNET_CHANNELS_PER_LED,
@@ -388,12 +390,13 @@ def create_app(led_count,
 
     periodic_tasks()
 
+    # LED API korrigieren:
     @app.route("/api/led/<int:index>", methods=["GET"])
     def api_get_led(index):
         if not (0 <= index < len(led_state)):
             return {"error": "index out of range"}, 404
-        r, g, b = led_state[index]
-        return {"index": index, "r": r, "g": b, "b": b}
+        r, g, b, w = led_state[index]
+        return {"index": index, "r": r, "g": g, "b": b, "w": w}
 
     @app.route("/api/led/<int:index>", methods=["POST"])
     def api_set_led(index):
@@ -403,21 +406,18 @@ def create_app(led_count,
         r = int(data.get("r", 0)) & 0xFF
         g = int(data.get("g", 0)) & 0xFF
         b = int(data.get("b", 0)) & 0xFF
-        set_led_rgb(index, r, g, b)
+        w = int(data.get("w", led_state[index][3])) & 0xFF
+        set_led_rgbw(index, r, g, b, w)
         return {"status": "ok"}
 
     @app.route("/api/led", methods=["GET"])
     def api_list_leds():
-        return [{"index": i, "r": c[0], "g": c[1], "b": c[2]} for i, c in enumerate(led_state)]
+        return [
+            {"index": i, "r": c[0], "g": c[1], "b": c[2], "w": c[3]}
+            for i, c in enumerate(led_state)
+        ]
 
-    @app.get("/api/artnet")
-    def api_get_artnet():
-        return {
-            "enable_artnet": settings["enable_artnet"],
-            "artnet_universe": settings["artnet_universe"],
-            "artnet_channel_offset": settings["artnet_channel_offset"],
-        }
-
+    # ArtNet POST (Kapazität prüfen nach Änderung):
     @app.post("/api/artnet")
     def api_set_artnet():
         nonlocal artnet_server
@@ -426,13 +426,19 @@ def create_app(led_count,
         settings["artnet_universe"] = int(data.get("artnet_universe", 0))
         settings["artnet_channel_offset"] = int(data.get("artnet_channel_offset", 0))
 
-        # Server neu starten / stoppen
         if artnet_server:
-            app.logger.debug("Stoppe bestehenden ArtNetServer vor Neustart")
+            app.logger.debug("Stoppe ArtNetServer für Neustart")
             artnet_server.stop()
             artnet_server = None
+
         if settings["enable_artnet"]:
             stop_current_animation()
+            max_leds_universe = (512 - settings["artnet_channel_offset"]) // ARTNET_CHANNELS_PER_LED
+            if len(led_state) > max_leds_universe:
+                app.logger.warning(
+                    "LED_COUNT (%d) > DMX Universe Kapazität (%d) -> Rest ignoriert",
+                    len(led_state), max_leds_universe
+                )
             artnet_server = ArtNetServer(
                 set_led_rgbw=set_led_rgbw,
                 led_count=len(led_state),
@@ -441,14 +447,7 @@ def create_app(led_count,
                 channels_per_led=ARTNET_CHANNELS_PER_LED,
             )
             artnet_server.start()
-            app.logger.debug(
-                "ArtNetServer (neu) aktiv: universe=%d offset=%d cpl=%d max_leds_universe=%d",
-                settings["artnet_universe"],
-                settings["artnet_channel_offset"],
-                ARTNET_CHANNELS_PER_LED,
-                (512 - settings["artnet_channel_offset"]) // ARTNET_CHANNELS_PER_LED
-            )
-        save_settings()  # angepasst, damit ArtNet-Settings persistieren
+        save_settings()
         return {"status": "ok"}
 
     return app
