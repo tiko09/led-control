@@ -118,7 +118,7 @@ class ArtNetServer:
             self.set_led_rgbw(led_index, r, g, b, w)
             updated += 1
 
-            if self.log.isEnabledFor(logging.DEBUG):
+            if self.log.isEnabledFor(logging.VERBOSE):
                 # DMX Kanäle 1-basiert ausgeben
                 ch_r = base + 1
                 ch_g = base + 2
@@ -139,7 +139,7 @@ class ArtNetServer:
                         f"{ch_r}={r}", f"{ch_g}={g}", f"{ch_b}={b}"
                     ))
 
-        if self.log.isEnabledFor(logging.DEBUG) and updated:
+        if self.log.isEnabledFor(logging.VERBOSE) and updated:
             # Detailliert pro LED
             for line in per_led_lines:
                 self.log.debug(line)
