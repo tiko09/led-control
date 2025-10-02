@@ -409,4 +409,12 @@ def create_app(led_count,
         save_settings()
         return {"status": "ok"}
 
+    @app.get("/api/artnet")
+    def api_get_artnet():
+        return {
+            "enable_artnet": settings.get("enable_artnet", False),
+            "artnet_universe": settings.get("artnet_universe", 0),
+            "artnet_channel_offset": settings.get("artnet_channel_offset", 0),
+        }
+
     return app
