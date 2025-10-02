@@ -19,7 +19,7 @@ import ledcontrol.colorpalettes as colorpalettes
 import ledcontrol.utils as utils
 
 import logging
-logging.basicConfig(level=logging.CRITICAL)
+logging.basicConfig(level=logging.INFO)
 
 # Anzahl Kanäle/LED
 ARTNET_CHANNELS_PER_LED = 4  # RGBW
