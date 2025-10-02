@@ -37,7 +37,7 @@ requirements = [
     'sacn>=1.8.1',
     'HAP-python==4.4.0',
     'pyopenssl==22.1.0',
-    'numpy>=1.21.0',
+    'numpy==1.26.4',
     'pyserial>=3.5',
     'Werkzeug==2.2.2',
 ] + (['bjoern>=3.2.1'] if sys.platform.startswith('linux') else []) + (['pyfastnoisesimd>=0.4.2'] if not is_raspberrypi() else [])
