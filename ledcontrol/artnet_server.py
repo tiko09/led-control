@@ -53,6 +53,7 @@ class ArtNetServer:
         self.log.info("ArtNet Server gestoppt")
 
     def poll(self):
+        self.log.debug("Selfe poll")
         applied = 0
         while True:
             try:
