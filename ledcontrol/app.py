@@ -181,7 +181,7 @@ def create_app(led_count,
     def push_led_to_hardware(index: int, r: int, g: int, b: int, w: int):
         #app.logger.debug("Push LED to hardware: index=%d r=%d g=%d b=%d w=%d", index, r, g, b, w)
         #only render on update of last LED to reduce SPI traffic
-        if index == LED_COUNT - 1:
+        if index == 127:
             app.logger.debug("Render LED to hardware: index=%d r=%d g=%d b=%d w=%d", index, r, g, b, w)
             leds.set_pixel_rgbw(index, r, g, b, w, render=True)
         else:   
