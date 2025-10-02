@@ -382,13 +382,6 @@ def create_app(led_count,
             (512 - settings["artnet_channel_offset"]) // ARTNET_CHANNELS_PER_LED
         )
 
-    def periodic_tasks():
-        if artnet_server:
-            artnet_server.poll()
-        Timer(0.02, periodic_tasks).start()  # ca. 50 Hz
-
-    periodic_tasks()
-
     # LED API korrigieren:
     @app.route("/api/led/<int:index>", methods=["GET"])
     def api_get_led(index):
