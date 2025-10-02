@@ -300,6 +300,11 @@ def create_app(led_count,
             'functions': functions_2,
             'palettes': palettes_2,
         }
+        data.update({
+            "enable_artnet": settings["enable_artnet"],
+            "artnet_universe": settings["artnet_universe"],
+            "artnet_channel_offset": settings["artnet_channel_offset"],
+        })
         with filename.open('w') as data_file:
             try:
                 json.dump(data, data_file, sort_keys=True, indent=4)
@@ -349,13 +354,16 @@ def create_app(led_count,
     def periodic_tasks():
         if artnet_server:
             artnet_server.poll()
+        Timer(0.02, periodic_tasks).start()  # ca. 50 Hz
+
+    periodic_tasks()
 
     @app.route("/api/led/<int:index>", methods=["GET"])
     def api_get_led(index):
         if not (0 <= index < len(led_state)):
             return {"error": "index out of range"}, 404
         r, g, b = led_state[index]
-        return {"index": index, "r": r, "g": g, "b": b}
+        return {"index": index, "r": r, "g": b, "b": b}
 
     @app.route("/api/led/<int:index>", methods=["POST"])
     def api_set_led(index):
@@ -371,5 +379,36 @@ def create_app(led_count,
     @app.route("/api/led", methods=["GET"])
     def api_list_leds():
         return [{"index": i, "r": c[0], "g": c[1], "b": c[2]} for i, c in enumerate(led_state)]
+
+    @app.get("/api/artnet")
+    def api_get_artnet():
+        return {
+            "enable_artnet": settings["enable_artnet"],
+            "artnet_universe": settings["artnet_universe"],
+            "artnet_channel_offset": settings["artnet_channel_offset"],
+        }
+
+    @app.post("/api/artnet")
+    def api_set_artnet():
+        nonlocal artnet_server
+        data = request.get_json(force=True)
+        settings["enable_artnet"] = bool(data.get("enable_artnet"))
+        settings["artnet_universe"] = int(data.get("artnet_universe", 0))
+        settings["artnet_channel_offset"] = int(data.get("artnet_channel_offset", 0))
+
+        # Server neu starten / stoppen
+        if artnet_server:
+            artnet_server.stop()
+            artnet_server = None
+        if settings["enable_artnet"]:
+            artnet_server = ArtNetServer(
+                set_led_rgb=set_led_rgb,
+                led_count=len(led_state),
+                universe=settings["artnet_universe"],
+                channel_offset=settings["artnet_channel_offset"],
+            )
+            artnet_server.start()
+        save_settings()  # angepasst, damit ArtNet-Settings persistieren
+        return {"status": "ok"}
 
     return app
