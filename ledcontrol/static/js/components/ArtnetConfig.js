@@ -45,7 +45,7 @@ export default {
               </select>
             </label>
             <label>
-              <span>Interpolation Size</span>
+              <span>Frame Interpolation Size</span>
               <input type="number" min="1" max="20" v-model.number="form.artnet_frame_interp_size">
             </label>
             <p style="grid-column:1/-1;font-size:.75rem;color:#888;margin:0;">
