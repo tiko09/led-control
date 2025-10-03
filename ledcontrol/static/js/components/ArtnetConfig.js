@@ -63,6 +63,14 @@ export default {
             <button @click="load" :disabled="saving">Neu laden</button>
             <span v-if="message" :style="{color: messageType==='error'?'#f55':'#5c5'}">{{ message }}</span>
           </div>
+
+          <label>
+            <span>Logging Level</span>
+            <select v-model="logLevel">
+              <option v-for="lvl in logLevels" :value="lvl">{{ lvl }}</option>
+            </select>
+            <button @click="saveLogLevel" :disabled="saving">Setzen</button>
+          </label>
         </div>
       </div>
     `,
@@ -81,7 +89,9 @@ export default {
           artnet_frame_interp_size: 2,
           artnet_spatial_smoothing: "none",
           artnet_spatial_size: 1,
-        }
+        },
+        logLevel: "INFO",
+        logLevels: ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
       };
     },
     methods: {
@@ -126,9 +136,30 @@ export default {
         } finally {
           this.saving = false;
         }
-      }
+      },
+      async saveLogLevel() {
+        this.saving = true;
+        try {
+          await fetch('/api/loglevel', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ log_level: this.logLevel })
+          });
+          this.message = "Log-Level gespeichert";
+          this.messageType = "ok";
+        } catch (e) {
+          this.message = "Fehler beim Speichern des Log-Levels";
+          this.messageType = "error";
+        }
+        this.saving = false;
+      },
     },
-    mounted() {
+    async mounted() {
       this.load();
+      const r = await fetch('/api/loglevel');
+      if (r.ok) {
+        const j = await r.json();
+        this.logLevel = j.log_level || "INFO";
+      }
     }
   };

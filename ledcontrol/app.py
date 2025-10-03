@@ -171,6 +171,7 @@ def create_app(led_count,
         "artnet_frame_interp_size": 2,          # vorher: artnet_filter_size
         "artnet_spatial_smoothing": "none",   # "none", "average", "lerp"
         "artnet_spatial_size": 1,             # Fenstergröße (z.B. 1=aus, 3=3er-Glättung)
+        "log_level": "INFO",  # NEU: Logging-Level
     }
     for k, v in config_defaults.items():
         settings.setdefault(k, v)
@@ -445,5 +446,27 @@ def create_app(led_count,
             "artnet_spatial_smoothing": settings.get("artnet_spatial_smoothing", "none"),
             "artnet_spatial_size": settings.get("artnet_spatial_size", 1),
         }
+
+    # Logging-Level setzen (Hilfsfunktion)
+    def set_log_level(level):
+        import logging
+        lvl = getattr(logging, level.upper(), logging.INFO)
+        logging.getLogger().setLevel(lvl)
+        # Optional: auch ArtNet-Logger etc.
+        logging.getLogger("artnet").setLevel(lvl)
+
+    set_log_level(settings.get("log_level", "INFO"))
+
+    @app.get("/api/loglevel")
+    def api_get_loglevel():
+        return {"log_level": settings.get("log_level", "INFO")}
+
+    @app.post("/api/loglevel")
+    def api_set_loglevel():
+        data = request.get_json(force=True)
+        level = data.get("log_level", "INFO")
+        settings["log_level"] = level
+        set_log_level(level)
+        return {"status": "ok"}
 
     return app
