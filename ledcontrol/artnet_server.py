@@ -147,7 +147,7 @@ class ArtNetServer:
                 self._last_values[idx] = history
                 expanded.extend((r, g, b, w))
                 phys_used += 1
-        if expanded:
+        if expanded and self.spatial_smoothing == "none":
             self.set_led_rgbw(expanded, 0)
 
         # --- Spatial Smoothing über Nachbar-LEDs ---
