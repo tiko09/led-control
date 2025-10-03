@@ -56,6 +56,14 @@ export default {
                 Math.ceil( form.artnet_group_size>0 ? (form.artnet_group_size) : 1 )
               }}er-Gruppen)
             </p>
+
+            <label>
+            <span>Logging Level</span>
+            <select v-model="logLevel">
+              <option v-for="lvl in logLevels" :value="lvl">{{ lvl }}</option>
+            </select>
+            <button @click="saveLogLevel" :disabled="saving">Setzen</button>
+          </label>
           </div>
   
           <div style="margin-top:1rem;display:flex;gap:.5rem;">
@@ -64,13 +72,7 @@ export default {
             <span v-if="message" :style="{color: messageType==='error'?'#f55':'#5c5'}">{{ message }}</span>
           </div>
 
-          <label>
-            <span>Logging Level</span>
-            <select v-model="logLevel">
-              <option v-for="lvl in logLevels" :value="lvl">{{ lvl }}</option>
-            </select>
-            <button @click="saveLogLevel" :disabled="saving">Setzen</button>
-          </label>
+          
         </div>
       </div>
     `,

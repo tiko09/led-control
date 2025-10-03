@@ -370,8 +370,10 @@ def create_app(led_count,
             channel_offset=settings.get("artnet_channel_offset", 0),
             channels_per_led=leds.getNrOfChannelsPerLed(),
             group_size=settings.get("artnet_group_size", 1),
-            frame_interpolation=settings.get("artnet_frame_interpolation", "none"),  # neu
-            frame_interp_size=settings.get("artnet_frame_interp_size", 2),      # neu
+            frame_interpolation=settings.get("artnet_frame_interpolation", "none"),
+            frame_interp_size=settings.get("artnet_frame_interp_size", 2),
+            spatial_smoothing=settings.get("artnet_spatial_smoothing", "none"),
+            spatial_size=settings.get("artnet_spatial_size", 1),
         )
         artnet_server.start()
         app.logger.debug(
