@@ -20,6 +20,17 @@ export default {
               <span>Channel Offset</span>
               <input type="number" min="0" max="511" v-model.number="form.artnet_channel_offset">
             </label>
+            <label>
+              <span>LEDs pro Pixel</span>
+              <input type="number" min="1" max="1024" v-model.number="form.artnet_group_size">
+            </label>
+            <p style="grid-column:1/-1;font-size:.75rem;color:#888;margin:0;">
+              Effektive phys. Kapazität: {{
+                Math.floor((512 - form.artnet_channel_offset)/4) * form.artnet_group_size
+              }} LEDs (aktueller Strip gesteuert durch {{
+                Math.ceil( form.artnet_group_size>0 ? (form.artnet_group_size) : 1 )
+              }}er-Gruppen)
+            </p>
           </div>
   
           <div style="margin-top:1rem;display:flex;gap:.5rem;">
@@ -39,7 +50,8 @@ export default {
         form: {
           enable_artnet: false,
           artnet_universe: 0,
-          artnet_channel_offset: 0
+          artnet_channel_offset: 0,
+          artnet_group_size: 1
         }
       };
     },
@@ -54,6 +66,7 @@ export default {
           this.form.enable_artnet = !!j.enable_artnet;
           this.form.artnet_universe = j.artnet_universe ?? 0;
           this.form.artnet_channel_offset = j.artnet_channel_offset ?? 0;
+          this.form.artnet_group_size = j.artnet_group_size ?? 1;
         } catch (e) {
           this.message = 'Laden fehlgeschlagen';
           this.messageType = 'error';

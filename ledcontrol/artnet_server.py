@@ -14,12 +14,13 @@ OPCODE_ART_DMX = 0x5000  # little endian in packet
 class ArtNetServer:
     def __init__(self, set_led_rgbw, led_count: int,
                  universe: int = 0, channel_offset: int = 0,
-                 channels_per_led: int = 4, host: str = "0.0.0.0"):
+                 channels_per_led: int = 4, group_size: int = 1, host: str = "0.0.0.0"):
         self.set_led_rgbw = set_led_rgbw
         self.led_count = led_count
         self.universe = universe
         self.channel_offset = channel_offset
         self.channels_per_led = channels_per_led
+        self.group_size = max(1, group_size)
         self.host = host
         self._sock: Optional[socket.socket] = None
         self._thread: Optional[threading.Thread] = None
@@ -96,22 +97,49 @@ class ArtNetServer:
             )
 
     def _apply_dmx(self, data: bytes) -> int:
-        self.set_led_rgbw(data,0)
+        group = self.group_size
+        phys_used = 0
+        if self.group_size == 1:
+            self.set_led_rgbw(data, 0) 
+            phys_used = len(data) // self.channels_per_led
+        else:
+            cpl = self.channels_per_led
+            offset = self.channel_offset
+            if offset >= len(data):
+                return 0
+            usable = len(data) - offset
+            dmx_pixels = usable // cpl
+            if dmx_pixels <= 0:
+                return 0
 
-                # FPS-Messung
+            expanded = bytearray()
+            phys_used = 0
+            for dmx_i in range(dmx_pixels):
+                if phys_used >= self.led_count:
+                    break
+                base = offset + dmx_i * cpl
+                r = data[base] if base < len(data) else 0
+                g = data[base+1] if base+1 < len(data) else 0
+                b = data[base+2] if base+2 < len(data) else 0
+                w = data[base+3] if cpl >= 4 and base+3 < len(data) else 0
+                for _ in range(group):
+                    if phys_used >= self.led_count:
+                        break
+                    expanded.extend((r, g, b, w))
+                    phys_used += 1
+
+            if expanded:
+                self.set_led_rgbw(expanded, 0)  # nutzt leds.set_pixels_from_flat
+
+        # FPS
         self._fps_count += 1
         now = time.time()
-        elapsed = now - self._fps_last_report
-        if elapsed >= self._fps_report_interval:
+        if (now - self._fps_last_report) >= self._fps_report_interval:
             total_elapsed = now - self._fps_start
             avg_fps_total = self._fps_count / total_elapsed if total_elapsed > 0 else 0.0
-            interval_fps = self._fps_count / total_elapsed if total_elapsed > 0 else 0.0  # alternativ: (self._fps_count_interval/elapsed)
-            self.log.info(
-                "ArtNet FPS: total_frames=%d total_time=%.1fs avg_fps=%.2f (Intervall %.0fs)",
-                self._fps_count, total_elapsed, avg_fps_total, self._fps_report_interval
-            )
+            self.log.info("ArtNet FPS: frames=%d time=%.1fs avg=%.2f",
+                          self._fps_count, total_elapsed, avg_fps_total)
             self._fps_last_report = now
-            # Optional: Für gleitenden Durchschnitt statt total neu starten:
             self._fps_start = now
             self._fps_count = 0
-        return (len(data) // self.channels_per_led)
+        return phys_used
