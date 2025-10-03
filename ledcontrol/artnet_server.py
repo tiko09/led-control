@@ -178,7 +178,7 @@ class ArtNetServer:
             for i in range(n_leds):
                 acc = [0, 0, 0, 0]
                 # apply kernel
-                for k in range(kernel):
+                for k in range(len(kernel)):
                     neighbor_idx = i + (k - half)
                     if 0 <= neighbor_idx < n_leds:
                         base = neighbor_idx * cpl
