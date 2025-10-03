@@ -167,8 +167,8 @@ def create_app(led_count,
         "artnet_universe": 0,
         "artnet_channel_offset": 0,
         "artnet_group_size": 1,
-        "artnet_smoothing": "none",
-        "artnet_filter_size": 2,  # NEU: Default Filtergröße
+        "artnet_frame_interpolation": "none",   # vorher: artnet_smoothing
+        "artnet_frame_interp_size": 2,          # vorher: artnet_filter_size
     }
     for k, v in config_defaults.items():
         settings.setdefault(k, v)
@@ -367,8 +367,8 @@ def create_app(led_count,
             channel_offset=settings.get("artnet_channel_offset", 0),
             channels_per_led=leds.getNrOfChannelsPerLed(),
             group_size=settings.get("artnet_group_size", 1),
-            smoothing=settings.get("artnet_smoothing", "none"),  # <--- NEU
-            filter_size=settings.get("artnet_filter_size", 2),  # NEU
+            frame_interpolation=settings.get("artnet_frame_interpolation", "none"),  # neu
+            frame_interp_size=settings.get("artnet_frame_interp_size", 2),      # neu
         )
         artnet_server.start()
         app.logger.debug(
@@ -388,8 +388,8 @@ def create_app(led_count,
         settings["artnet_universe"] = int(data.get("artnet_universe", 0))
         settings["artnet_channel_offset"] = int(data.get("artnet_channel_offset", 0))
         settings["artnet_group_size"] = max(1, int(data.get("artnet_group_size", 1)))
-        settings["artnet_smoothing"] = data.get("artnet_smoothing", "none")
-        settings["artnet_filter_size"] = max(1, int(data.get("artnet_filter_size", 2)))
+        settings["artnet_frame_interpolation"] = data.get("artnet_frame_interpolation", "none")
+        settings["artnet_frame_interp_size"] = max(1, int(data.get("artnet_frame_interp_size", 2)))
 
         if artnet_server:
             app.logger.debug("Stoppe ArtNetServer für Neustart")
@@ -416,8 +416,8 @@ def create_app(led_count,
                 channel_offset=settings["artnet_channel_offset"],
                 channels_per_led=leds.getNrOfChannelsPerLed(),
                 group_size=group_size,
-                smoothing=settings["artnet_smoothing"],  # <--- NEU
-                filter_size=settings["artnet_filter_size"],  # NEU
+                frame_interpolation=settings["artnet_frame_interpolation"],  # neu
+                frame_interp_size=settings["artnet_frame_interp_size"],      # neu
             )
             artnet_server.start()
         else:
@@ -434,8 +434,8 @@ def create_app(led_count,
             "artnet_universe": settings.get("artnet_universe", 0),
             "artnet_channel_offset": settings.get("artnet_channel_offset", 0),
             "artnet_group_size": settings.get("artnet_group_size", 1),
-            "artnet_smoothing": settings.get("artnet_smoothing", "none"),
-            "artnet_filter_size": settings.get("artnet_filter_size", 2),
+            "artnet_frame_interpolation": settings.get("artnet_frame_interpolation", "none"),
+            "artnet_frame_interp_size": settings.get("artnet_frame_interp_size", 2),
         }
 
     return app

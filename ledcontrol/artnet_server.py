@@ -15,15 +15,15 @@ class ArtNetServer:
     def __init__(self, set_led_rgbw, led_count: int,
                  universe: int = 0, channel_offset: int = 0,
                  channels_per_led: int = 4, group_size: int = 1,
-                 smoothing: str = "none", filter_size: int = 2, host: str = "0.0.0.0"):
+                 frame_interpolation: str = "none", frame_interp_size: int = 2, host: str = "0.0.0.0"):
         self.set_led_rgbw = set_led_rgbw
         self.led_count = led_count
         self.universe = universe
         self.channel_offset = channel_offset
         self.channels_per_led = channels_per_led
         self.group_size = max(1, group_size)
-        self.smoothing = smoothing
-        self.filter_size = max(1, filter_size)
+        self.frame_interpolation = frame_interpolation
+        self.frame_interp_size = max(1, frame_interp_size)
         self.host = host
         self._last_values = [ [] for _ in range(led_count) ]  # Liste von Listen für Filter
         self._sock: Optional[socket.socket] = None
@@ -104,8 +104,8 @@ class ArtNetServer:
         group = self.group_size
         cpl = self.channels_per_led
         offset = self.channel_offset
-        smoothing = self.smoothing
-        filter_size = self.filter_size
+        frame_interpolation = self.frame_interpolation
+        frame_interp_size = self.frame_interp_size
         usable = len(data) - offset
         dmx_pixels = usable // cpl
         phys_used = 0
@@ -125,16 +125,16 @@ class ArtNetServer:
                 # --- Smoothing mit Filtergröße ---
                 history = self._last_values[idx]
                 history.append((r, g, b, w))
-                if len(history) > filter_size:
+                if len(history) > frame_interp_size:
                     history.pop(0)
-                if smoothing == "average" and len(history) > 1:
+                if frame_interpolation == "average" and len(history) > 1:
                     r_s = sum(x[0] for x in history) // len(history)
                     g_s = sum(x[1] for x in history) // len(history)
                     b_s = sum(x[2] for x in history) // len(history)
                     w_s = sum(x[3] for x in history) // len(history)
                     r, g, b, w = r_s, g_s, b_s, w_s
-                elif smoothing == "lerp" and len(history) > 1:
-                    alpha = 1.0 / filter_size
+                elif frame_interpolation == "lerp" and len(history) > 1:
+                    alpha = 1.0 / frame_interp_size
                     prev = history[-2]
                     r = int(prev[0] + alpha * (r - prev[0]))
                     g = int(prev[1] + alpha * (g - prev[1]))

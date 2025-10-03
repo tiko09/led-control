@@ -36,6 +36,18 @@ export default {
               <span>Filtergröße</span>
               <input type="number" min="1" max="20" v-model.number="form.artnet_filter_size">
             </label>
+            <label>
+              <span>Frame Interpolation</span>
+              <select v-model="form.artnet_frame_interpolation">
+                <option value="none">None</option>
+                <option value="average">Moving Average</option>
+                <option value="lerp">Lerp</option>
+              </select>
+            </label>
+            <label>
+              <span>Interpolation Size</span>
+              <input type="number" min="1" max="20" v-model.number="form.artnet_frame_interp_size">
+            </label>
             <p style="grid-column:1/-1;font-size:.75rem;color:#888;margin:0;">
               Effektive phys. Kapazität: {{
                 Math.floor((512 - form.artnet_channel_offset)/4) * form.artnet_group_size
@@ -65,7 +77,9 @@ export default {
           artnet_channel_offset: 0,
           artnet_group_size: 1,
           artnet_smoothing: "none",
-          artnet_filter_size: 2
+          artnet_filter_size: 2,
+          artnet_frame_interpolation: "none",
+          artnet_frame_interp_size: 2
         }
       };
     },
@@ -83,6 +97,8 @@ export default {
           this.form.artnet_group_size = j.artnet_group_size ?? 1;
           this.form.artnet_smoothing = j.artnet_smoothing ?? "none";
           this.form.artnet_filter_size = j.artnet_filter_size ?? 2;
+          this.form.artnet_frame_interpolation = j.artnet_frame_interpolation ?? "none";
+          this.form.artnet_frame_interp_size = j.artnet_frame_interp_size ?? 2;
         } catch (e) {
           this.message = 'Laden fehlgeschlagen';
           this.messageType = 'error';
