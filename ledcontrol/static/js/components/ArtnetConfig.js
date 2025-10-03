@@ -42,6 +42,7 @@ export default {
                 <option value="none">None</option>
                 <option value="average">Moving Average</option>
                 <option value="lerp">Lerp</option>
+                <option value="gaussian">Gaussian</option>
               </select>
             </label>
             <label>

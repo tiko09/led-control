@@ -3,6 +3,7 @@ import socket
 import struct
 import threading
 import logging
+import math
 from queue import Queue, Empty
 from typing import Callable, Optional
 import time  # (oben ergänzen)
@@ -162,7 +163,6 @@ class ArtNetServer:
             smoothed = bytearray()
             
             # build filter Kernel based on specified window size and filter function
-            # For "average", use uniform weights; for "lerp", use linear weights; else, no kernel needed
             if self.spatial_smoothing == "average":
                 kernel = [1.0 / window] * window
             elif self.spatial_smoothing == "lerp":
@@ -170,6 +170,13 @@ class ArtNetServer:
                 raw_kernel = [window - abs(i - center) for i in range(window)]
                 kernel_sum = sum(raw_kernel)
                 kernel = [k / kernel_sum for k in raw_kernel]
+            elif self.spatial_smoothing == "gaussian":
+                # Gauß-Kernel berechnen (sigma proportional zu window)
+                center = window // 2
+                sigma = max(1.0, window / 4.0)
+                kernel = [math.exp(-0.5 * ((i - center) / sigma) ** 2) for i in range(window)]
+                kernel_sum = sum(kernel)
+                kernel = [k / kernel_sum for k in kernel]
             else:
                 kernel = [1.0 / window] * window  # fallback
 
