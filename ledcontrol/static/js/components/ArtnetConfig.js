@@ -24,6 +24,14 @@ export default {
               <span>LEDs pro Pixel</span>
               <input type="number" min="1" max="1024" v-model.number="form.artnet_group_size">
             </label>
+            <label>
+              <span>Smoothing-Filter</span>
+              <select v-model="form.artnet_smoothing">
+                <option value="none">Keiner</option>
+                <option value="average">Gleitender Mittelwert</option>
+                <option value="lerp">Sanft (Lerp)</option>
+              </select>
+            </label>
             <p style="grid-column:1/-1;font-size:.75rem;color:#888;margin:0;">
               Effektive phys. Kapazität: {{
                 Math.floor((512 - form.artnet_channel_offset)/4) * form.artnet_group_size
@@ -51,7 +59,8 @@ export default {
           enable_artnet: false,
           artnet_universe: 0,
           artnet_channel_offset: 0,
-          artnet_group_size: 1
+          artnet_group_size: 1,
+          artnet_smoothing: "none"
         }
       };
     },
@@ -67,6 +76,7 @@ export default {
           this.form.artnet_universe = j.artnet_universe ?? 0;
           this.form.artnet_channel_offset = j.artnet_channel_offset ?? 0;
           this.form.artnet_group_size = j.artnet_group_size ?? 1;
+          this.form.artnet_smoothing = j.artnet_smoothing ?? "none";
         } catch (e) {
           this.message = 'Laden fehlgeschlagen';
           this.messageType = 'error';

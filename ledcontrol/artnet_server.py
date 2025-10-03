@@ -14,14 +14,17 @@ OPCODE_ART_DMX = 0x5000  # little endian in packet
 class ArtNetServer:
     def __init__(self, set_led_rgbw, led_count: int,
                  universe: int = 0, channel_offset: int = 0,
-                 channels_per_led: int = 4, group_size: int = 1, host: str = "0.0.0.0"):
+                 channels_per_led: int = 4, group_size: int = 1,
+                 smoothing: str = "none", host: str = "0.0.0.0"):
         self.set_led_rgbw = set_led_rgbw
         self.led_count = led_count
         self.universe = universe
         self.channel_offset = channel_offset
         self.channels_per_led = channels_per_led
         self.group_size = max(1, group_size)
+        self.smoothing = smoothing  # "none", "average", "lerp"
         self.host = host
+        self._last_values = [None] * led_count  # Für Filter
         self._sock: Optional[socket.socket] = None
         self._thread: Optional[threading.Thread] = None
         self._running = threading.Event()
@@ -98,38 +101,43 @@ class ArtNetServer:
 
     def _apply_dmx(self, data: bytes) -> int:
         group = self.group_size
+        cpl = self.channels_per_led
+        offset = self.channel_offset
+        smoothing = self.smoothing
+        usable = len(data) - offset
+        dmx_pixels = usable // cpl
         phys_used = 0
-        if self.group_size == 1:
-            self.set_led_rgbw(data, 0) 
-            phys_used = len(data) // self.channels_per_led
-        else:
-            cpl = self.channels_per_led
-            offset = self.channel_offset
-            if offset >= len(data):
-                return 0
-            usable = len(data) - offset
-            dmx_pixels = usable // cpl
-            if dmx_pixels <= 0:
-                return 0
-
-            expanded = bytearray()
-            phys_used = 0
-            for dmx_i in range(dmx_pixels):
+        expanded = bytearray()
+        for dmx_i in range(dmx_pixels):
+            if phys_used >= self.led_count:
+                break
+            base = offset + dmx_i * cpl
+            r = data[base] if base < len(data) else 0
+            g = data[base+1] if base+1 < len(data) else 0
+            b = data[base+2] if base+2 < len(data) else 0
+            w = data[base+3] if cpl >= 4 and base+3 < len(data) else 0
+            for _ in range(group):
                 if phys_used >= self.led_count:
                     break
-                base = offset + dmx_i * cpl
-                r = data[base] if base < len(data) else 0
-                g = data[base+1] if base+1 < len(data) else 0
-                b = data[base+2] if base+2 < len(data) else 0
-                w = data[base+3] if cpl >= 4 and base+3 < len(data) else 0
-                for _ in range(group):
-                    if phys_used >= self.led_count:
-                        break
-                    expanded.extend((r, g, b, w))
-                    phys_used += 1
-
-            if expanded:
-                self.set_led_rgbw(expanded, 0) 
+                # --- Smoothing ---
+                idx = phys_used
+                prev = self._last_values[idx]
+                if smoothing == "average" and prev is not None:
+                    r = (r + prev[0]) // 2
+                    g = (g + prev[1]) // 2
+                    b = (b + prev[2]) // 2
+                    w = (w + prev[3]) // 2
+                elif smoothing == "lerp" and prev is not None:
+                    alpha = 0.3  # Glättungsfaktor
+                    r = int(prev[0] + alpha * (r - prev[0]))
+                    g = int(prev[1] + alpha * (g - prev[1]))
+                    b = int(prev[2] + alpha * (b - prev[2]))
+                    w = int(prev[3] + alpha * (w - prev[3]))
+                self._last_values[idx] = (r, g, b, w)
+                expanded.extend((r, g, b, w))
+                phys_used += 1
+        if expanded:
+            self.set_led_rgbw(expanded, 0)
 
         # FPS
         self._fps_count += 1

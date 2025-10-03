@@ -166,7 +166,8 @@ def create_app(led_count,
         "enable_artnet": False,
         "artnet_universe": 0,
         "artnet_channel_offset": 0,
-        "artnet_group_size": 1, 
+        "artnet_group_size": 1,
+        "artnet_smoothing": "none",  # "none", "average", "lerp"
     }
     for k, v in config_defaults.items():
         settings.setdefault(k, v)
@@ -376,6 +377,7 @@ def create_app(led_count,
         settings["artnet_universe"] = int(data.get("artnet_universe", 0))
         settings["artnet_channel_offset"] = int(data.get("artnet_channel_offset", 0))
         settings["artnet_group_size"] = max(1, int(data.get("artnet_group_size", 1)))
+        settings["artnet_smoothing"] = data.get("artnet_smoothing", "none")
 
         if artnet_server:
             app.logger.debug("Stoppe ArtNetServer für Neustart")
@@ -402,6 +404,7 @@ def create_app(led_count,
                 channel_offset=settings["artnet_channel_offset"],
                 channels_per_led=leds.getNrOfChannelsPerLed(),
                 group_size=group_size,
+                smoothing=settings["artnet_smoothing"],  # <--- NEU
             )
             artnet_server.start()
         else:
@@ -418,6 +421,7 @@ def create_app(led_count,
             "artnet_universe": settings.get("artnet_universe", 0),
             "artnet_channel_offset": settings.get("artnet_channel_offset", 0),
             "artnet_group_size": settings.get("artnet_group_size", 1),
+            "artnet_smoothing": settings.get("artnet_smoothing", "none"),
         }
 
     return app
