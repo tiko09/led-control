@@ -19,7 +19,7 @@ import ledcontrol.colorpalettes as colorpalettes
 import ledcontrol.utils as utils
 
 import logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)
 
 def create_app(led_count,
                config_file,

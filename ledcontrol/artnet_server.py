@@ -173,6 +173,8 @@ class ArtNetServer:
             else:
                 kernel = [1.0 / window] * window  # fallback
 
+            # print the kernel
+            self.log.debug("Spatial Smoothing Kernel: %s", kernel)
 
             #itterate of all leds
             for i in range(n_leds):
