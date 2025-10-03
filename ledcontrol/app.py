@@ -21,9 +21,6 @@ import ledcontrol.utils as utils
 import logging
 logging.basicConfig(level=logging.INFO)
 
-# Anzahl Kanäle/LED
-ARTNET_CHANNELS_PER_LED = 4  # RGBW
-
 def create_app(led_count,
                config_file,
                pixel_mapping_file,
@@ -348,7 +345,7 @@ def create_app(led_count,
     # Beim Start ArtNet (Warnung Kapazität):
     if settings.get("enable_artnet"):
         stop_current_animation()
-        max_leds_universe = (512 - settings.get("artnet_channel_offset", 0)) // ARTNET_CHANNELS_PER_LED
+        max_leds_universe = (512 - settings.get("artnet_channel_offset", 0)) // leds.getNrOfChannelsPerLed()
         if led_count > max_leds_universe:
             app.logger.warning(
                 "LED count (%d) > DMX Universe Kapazität (%d) -> Rest ignoriert",
@@ -359,15 +356,15 @@ def create_app(led_count,
             led_count=led_count,
             universe=settings.get("artnet_universe", 0),
             channel_offset=settings.get("artnet_channel_offset", 0),
-            channels_per_led=ARTNET_CHANNELS_PER_LED
+            channels_per_led=leds.getNrOfChannelsPerLed()
         )
         artnet_server.start()
         app.logger.debug(
             "ArtNetServer aktiv: universe=%d offset=%d cpl=%d max_leds_universe=%d",
             settings["artnet_universe"],
             settings["artnet_channel_offset"],
-            ARTNET_CHANNELS_PER_LED,
-            (512 - settings["artnet_channel_offset"]) // ARTNET_CHANNELS_PER_LED
+            leds.getNrOfChannelsPerLed(),
+            (512 - settings["artnet_channel_offset"]) // leds.getNrOfChannelsPerLed()
         )
 
     # ArtNet POST (Kapazität prüfen nach Änderung):
@@ -388,7 +385,7 @@ def create_app(led_count,
         if settings["enable_artnet"]:
             stop_current_animation()
             group_size = settings["artnet_group_size"]
-            max_dmx_pixels = (512 - settings["artnet_channel_offset"]) // ARTNET_CHANNELS_PER_LED
+            max_dmx_pixels = (512 - settings["artnet_channel_offset"]) // leds.getNrOfChannelsPerLed()
             max_phys_leds = max_dmx_pixels * group_size
             if led_count > max_phys_leds:
                 app.logger.warning(
@@ -403,7 +400,7 @@ def create_app(led_count,
                 led_count=led_count,
                 universe=settings["artnet_universe"],
                 channel_offset=settings["artnet_channel_offset"],
-                channels_per_led=ARTNET_CHANNELS_PER_LED,
+                channels_per_led=leds.getNrOfChannelsPerLed(),
                 group_size=group_size,
             )
             artnet_server.start()

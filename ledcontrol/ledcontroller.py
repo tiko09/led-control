@@ -98,6 +98,9 @@ class LEDController:
 
         self._udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
+    def getNrOfChannelsPerLed(self):
+        return 4 if self._has_white else 3
+    
     def _cleanup(self):
         # Clean up memory used by the library when not needed anymore
         if driver.is_raspberrypi() and self._leds is not None:
