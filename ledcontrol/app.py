@@ -365,7 +365,10 @@ def create_app(led_count,
             led_count=led_count,
             universe=settings.get("artnet_universe", 0),
             channel_offset=settings.get("artnet_channel_offset", 0),
-            channels_per_led=leds.getNrOfChannelsPerLed()
+            channels_per_led=leds.getNrOfChannelsPerLed(),
+            group_size=settings.get("artnet_group_size", 1),
+            smoothing=settings.get("artnet_smoothing", "none"),  # <--- NEU
+            filter_size=settings.get("artnet_filter_size", 2),  # NEU
         )
         artnet_server.start()
         app.logger.debug(
