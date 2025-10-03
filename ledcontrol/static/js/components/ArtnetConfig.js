@@ -25,18 +25,6 @@ export default {
               <input type="number" min="1" max="1024" v-model.number="form.artnet_group_size">
             </label>
             <label>
-              <span>Smoothing-Filter</span>
-              <select v-model="form.artnet_smoothing">
-                <option value="none">Keiner</option>
-                <option value="average">Gleitender Mittelwert</option>
-                <option value="lerp">Sanft (Lerp)</option>
-              </select>
-            </label>
-            <label>
-              <span>Filtergröße</span>
-              <input type="number" min="1" max="20" v-model.number="form.artnet_filter_size">
-            </label>
-            <label>
               <span>Frame Interpolation</span>
               <select v-model="form.artnet_frame_interpolation">
                 <option value="none">None</option>
@@ -47,6 +35,18 @@ export default {
             <label>
               <span>Frame Interpolation Size</span>
               <input type="number" min="1" max="20" v-model.number="form.artnet_frame_interp_size">
+            </label>
+            <label>
+              <span>Spatial Smoothing</span>
+              <select v-model="form.artnet_spatial_smoothing">
+                <option value="none">None</option>
+                <option value="average">Moving Average</option>
+                <option value="lerp">Lerp</option>
+              </select>
+            </label>
+            <label>
+              <span>Spatial Window Size</span>
+              <input type="number" min="1" max="20" v-model.number="form.artnet_spatial_size">
             </label>
             <p style="grid-column:1/-1;font-size:.75rem;color:#888;margin:0;">
               Effektive phys. Kapazität: {{
@@ -76,10 +76,10 @@ export default {
           artnet_universe: 0,
           artnet_channel_offset: 0,
           artnet_group_size: 1,
-          artnet_smoothing: "none",
-          artnet_filter_size: 2,
           artnet_frame_interpolation: "none",
-          artnet_frame_interp_size: 2
+          artnet_frame_interp_size: 2,
+          artnet_spatial_smoothing: "none",
+          artnet_spatial_size: 1,
         }
       };
     },
@@ -96,9 +96,10 @@ export default {
           this.form.artnet_channel_offset = j.artnet_channel_offset ?? 0;
           this.form.artnet_group_size = j.artnet_group_size ?? 1;
           this.form.artnet_smoothing = j.artnet_smoothing ?? "none";
-          this.form.artnet_filter_size = j.artnet_filter_size ?? 2;
           this.form.artnet_frame_interpolation = j.artnet_frame_interpolation ?? "none";
           this.form.artnet_frame_interp_size = j.artnet_frame_interp_size ?? 2;
+          this.form.artnet_spatial_smoothing = j.artnet_spatial_smoothing ?? "none";
+          this.form.artnet_spatial_size = j.artnet_spatial_size ?? 1;
         } catch (e) {
           this.message = 'Laden fehlgeschlagen';
           this.messageType = 'error';

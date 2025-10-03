@@ -15,7 +15,9 @@ class ArtNetServer:
     def __init__(self, set_led_rgbw, led_count: int,
                  universe: int = 0, channel_offset: int = 0,
                  channels_per_led: int = 4, group_size: int = 1,
-                 frame_interpolation: str = "none", frame_interp_size: int = 2, host: str = "0.0.0.0"):
+                 frame_interpolation: str = "none", frame_interp_size: int = 2,
+                 spatial_smoothing: str = "none", spatial_size: int = 1,
+                 host: str = "0.0.0.0"):
         self.set_led_rgbw = set_led_rgbw
         self.led_count = led_count
         self.universe = universe
@@ -25,6 +27,8 @@ class ArtNetServer:
         self.frame_interpolation = frame_interpolation
         self.frame_interp_size = max(1, frame_interp_size)
         self.host = host
+        self.spatial_smoothing = spatial_smoothing
+        self.spatial_size = max(1, spatial_size)
         self._last_values = [ [] for _ in range(led_count) ]  # Liste von Listen für Filter
         self._sock: Optional[socket.socket] = None
         self._thread: Optional[threading.Thread] = None
@@ -143,6 +147,51 @@ class ArtNetServer:
                 self._last_values[idx] = history
                 expanded.extend((r, g, b, w))
                 phys_used += 1
+        if expanded:
+            self.set_led_rgbw(expanded, 0)
+
+        # --- Spatial Smoothing über Nachbar-LEDs ---
+        if self.spatial_smoothing != "none" and self.spatial_size > 1:
+            cpl = self.channels_per_led
+            n_leds = phys_used
+            window = self.spatial_size
+            half = window // 2
+            smoothed = bytearray(len(expanded))
+            for i in range(n_leds):
+                acc = [0, 0, 0, 0]
+                count = 0
+                for j in range(max(0, i - half), min(n_leds, i + half + 1)):
+                    base = j * cpl
+                    acc[0] += expanded[base]
+                    acc[1] += expanded[base + 1]
+                    acc[2] += expanded[base + 2]
+                    if cpl == 4:
+                        acc[3] += expanded[base + 3]
+                    count += 1
+                if self.spatial_smoothing == "average":
+                    r = acc[0] // count
+                    g = acc[1] // count
+                    b = acc[2] // count
+                    w = acc[3] // count if cpl == 4 else 0
+                elif self.spatial_smoothing == "lerp":
+                    # Lerp mit Nachbarn (nur links/rechts, alpha aus Fenstergröße)
+                    alpha = 1.0 / count
+                    r = int(expanded[i * cpl] * (1 - alpha) + (acc[0] - expanded[i * cpl]) * alpha / (count - 1))
+                    g = int(expanded[i * cpl + 1] * (1 - alpha) + (acc[1] - expanded[i * cpl + 1]) * alpha / (count - 1))
+                    b = int(expanded[i * cpl + 2] * (1 - alpha) + (acc[2] - expanded[i * cpl + 2]) * alpha / (count - 1))
+                    w = int(expanded[i * cpl + 3] * (1 - alpha) + (acc[3] - expanded[i * cpl + 3]) * alpha / (count - 1)) if cpl == 4 else 0
+                else:
+                    r = expanded[i * cpl]
+                    g = expanded[i * cpl + 1]
+                    b = expanded[i * cpl + 2]
+                    w = expanded[i * cpl + 3] if cpl == 4 else 0
+                smoothed[i * cpl] = r
+                smoothed[i * cpl + 1] = g
+                smoothed[i * cpl + 2] = b
+                if cpl == 4:
+                    smoothed[i * cpl + 3] = w
+            expanded = smoothed
+
         if expanded:
             self.set_led_rgbw(expanded, 0)
 

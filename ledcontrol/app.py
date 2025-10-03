@@ -169,6 +169,8 @@ def create_app(led_count,
         "artnet_group_size": 1,
         "artnet_frame_interpolation": "none",   # vorher: artnet_smoothing
         "artnet_frame_interp_size": 2,          # vorher: artnet_filter_size
+        "artnet_spatial_smoothing": "none",   # "none", "average", "lerp"
+        "artnet_spatial_size": 1,             # Fenstergröße (z.B. 1=aus, 3=3er-Glättung)
     }
     for k, v in config_defaults.items():
         settings.setdefault(k, v)
@@ -390,6 +392,8 @@ def create_app(led_count,
         settings["artnet_group_size"] = max(1, int(data.get("artnet_group_size", 1)))
         settings["artnet_frame_interpolation"] = data.get("artnet_frame_interpolation", "none")
         settings["artnet_frame_interp_size"] = max(1, int(data.get("artnet_frame_interp_size", 2)))
+        settings["artnet_spatial_smoothing"] = data.get("artnet_spatial_smoothing", "none")
+        settings["artnet_spatial_size"] = max(1, int(data.get("artnet_spatial_size", 1)))
 
         if artnet_server:
             app.logger.debug("Stoppe ArtNetServer für Neustart")
@@ -418,6 +422,8 @@ def create_app(led_count,
                 group_size=group_size,
                 frame_interpolation=settings["artnet_frame_interpolation"],  # neu
                 frame_interp_size=settings["artnet_frame_interp_size"],      # neu
+                spatial_smoothing=settings["artnet_spatial_smoothing"],
+                spatial_size=settings["artnet_spatial_size"],
             )
             artnet_server.start()
         else:
@@ -436,6 +442,8 @@ def create_app(led_count,
             "artnet_group_size": settings.get("artnet_group_size", 1),
             "artnet_frame_interpolation": settings.get("artnet_frame_interpolation", "none"),
             "artnet_frame_interp_size": settings.get("artnet_frame_interp_size", 2),
+            "artnet_spatial_smoothing": settings.get("artnet_spatial_smoothing", "none"),
+            "artnet_spatial_size": settings.get("artnet_spatial_size", 1),
         }
 
     return app
