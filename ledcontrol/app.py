@@ -175,12 +175,10 @@ def create_app(led_count,
 
     # Restore ArtNet parameters from root if present (for backward compatibility)
     for k in ("enable_artnet", "artnet_universe", "artnet_channel_offset", "artnet_group_size", "artnet_smoothing", "artnet_filter_size"):
-        if k in settings:
-            continue
-        if k in config_defaults:
-            settings[k] = config_defaults[k]
         if k in json.loads(settings_str):
             settings[k] = json.loads(settings_str)[k]
+        elif k in config_defaults and k not in settings:
+            settings[k] = config_defaults[k]
 
     artnet_server = None
 
