@@ -32,6 +32,10 @@ export default {
                 <option value="lerp">Sanft (Lerp)</option>
               </select>
             </label>
+            <label>
+              <span>Filtergröße</span>
+              <input type="number" min="1" max="20" v-model.number="form.artnet_filter_size">
+            </label>
             <p style="grid-column:1/-1;font-size:.75rem;color:#888;margin:0;">
               Effektive phys. Kapazität: {{
                 Math.floor((512 - form.artnet_channel_offset)/4) * form.artnet_group_size
@@ -60,7 +64,8 @@ export default {
           artnet_universe: 0,
           artnet_channel_offset: 0,
           artnet_group_size: 1,
-          artnet_smoothing: "none"
+          artnet_smoothing: "none",
+          artnet_filter_size: 2
         }
       };
     },
@@ -77,6 +82,7 @@ export default {
           this.form.artnet_channel_offset = j.artnet_channel_offset ?? 0;
           this.form.artnet_group_size = j.artnet_group_size ?? 1;
           this.form.artnet_smoothing = j.artnet_smoothing ?? "none";
+          this.form.artnet_filter_size = j.artnet_filter_size ?? 2;
         } catch (e) {
           this.message = 'Laden fehlgeschlagen';
           this.messageType = 'error';
