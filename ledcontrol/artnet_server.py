@@ -155,45 +155,47 @@ class ArtNetServer:
             cpl = self.channels_per_led
             n_leds = phys_used
             window = self.spatial_size
+            #check if window is uneven if not expand by one
+            if window % 2 == 0:
+                window += 1
             half = window // 2
-            smoothed = bytearray(len(expanded))
+            smoothed = bytearray()
+            
+            # build filter Kernel based on specified window size and filter function
+            # For "average", use uniform weights; for "lerp", use linear weights; else, no kernel needed
+            if self.spatial_smoothing == "average":
+                kernel = [1.0 / window] * window
+            elif self.spatial_smoothing == "lerp":
+                center = window // 2
+                raw_kernel = [window - abs(i - center) for i in range(window)]
+                kernel_sum = sum(raw_kernel)
+                kernel = [k / kernel_sum for k in raw_kernel]
+            else:
+                kernel = [1.0 / window] * window  # fallback
+
+
+            #itterate of all leds
             for i in range(n_leds):
                 acc = [0, 0, 0, 0]
-                count = 0
-                for j in range(max(0, i - half), min(n_leds, i + half + 1)):
-                    base = j * cpl
-                    acc[0] += expanded[base]
-                    acc[1] += expanded[base + 1]
-                    acc[2] += expanded[base + 2]
-                    if cpl == 4:
-                        acc[3] += expanded[base + 3]
-                    count += 1
-                if self.spatial_smoothing == "average":
-                    r = acc[0] // count
-                    g = acc[1] // count
-                    b = acc[2] // count
-                    w = acc[3] // count if cpl == 4 else 0
-                elif self.spatial_smoothing == "lerp":
-                    # Lerp mit Nachbarn (nur links/rechts, alpha aus Fenstergröße)
-                    alpha = 1.0 / count
-                    r = int(expanded[i * cpl] * (1 - alpha) + (acc[0] - expanded[i * cpl]) * alpha / (count - 1))
-                    g = int(expanded[i * cpl + 1] * (1 - alpha) + (acc[1] - expanded[i * cpl + 1]) * alpha / (count - 1))
-                    b = int(expanded[i * cpl + 2] * (1 - alpha) + (acc[2] - expanded[i * cpl + 2]) * alpha / (count - 1))
-                    w = int(expanded[i * cpl + 3] * (1 - alpha) + (acc[3] - expanded[i * cpl + 3]) * alpha / (count - 1)) if cpl == 4 else 0
-                else:
-                    r = expanded[i * cpl]
-                    g = expanded[i * cpl + 1]
-                    b = expanded[i * cpl + 2]
-                    w = expanded[i * cpl + 3] if cpl == 4 else 0
-                smoothed[i * cpl] = r
-                smoothed[i * cpl + 1] = g
-                smoothed[i * cpl + 2] = b
-                if cpl == 4:
-                    smoothed[i * cpl + 3] = w
+                # apply kernel
+                for k in range(kernel):
+                    neighbor_idx = i + (k - half)
+                    if 0 <= neighbor_idx < n_leds:
+                        base = neighbor_idx * cpl
+                        r = expanded[base]
+                        g = expanded[base + 1]
+                        b = expanded[base + 2]
+                        w = expanded[base + 3] if cpl == 4 else 0
+                        weight = kernel[k]
+                        acc[0] += r * weight
+                        acc[1] += g * weight
+                        acc[2] += b * weight
+                        acc[3] += w * weight
+                smoothed.extend((int(acc[0]), int(acc[1]), int(acc[2]), int(acc[3])))
+                
             expanded = smoothed
-
-        if expanded:
-            self.set_led_rgbw(expanded, 0)
+            if expanded:
+                self.set_led_rgbw(expanded, 0)
 
         # FPS
         self._fps_count += 1
