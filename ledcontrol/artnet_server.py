@@ -129,7 +129,7 @@ class ArtNetServer:
                     phys_used += 1
 
             if expanded:
-                self.set_led_rgbw(expanded, 0)  # nutzt leds.set_pixels_from_flat
+                self.set_led_rgbw(expanded, 0) 
 
         # FPS
         self._fps_count += 1
