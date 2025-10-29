@@ -364,6 +364,8 @@ class AnimationController:
 
         if self._update_needed:
             self._update_needed = False
+            needs_continuous_update = False  # Track if any group needs continuous updates
+            
             # Store dict keys as list in case they are changed during iteration
             for group, settings in list(self._settings['groups'].items()):
                 try:
@@ -448,13 +450,16 @@ class AnimationController:
                     self._led_controller.render()
                     return
 
-                # If displaying a static pattern, brightness is 0, or speed is 0:
-                # no update is needed the next frame
-                if (not self._update_needed
-                    and settings['function'] not in animfunctions.static_function_ids
+                # Check if this group needs continuous updates
+                # A group needs updates if it's not static, has speed > 0, and brightness > 0
+                if (settings['function'] not in animfunctions.static_function_ids
                     and settings['speed'] != 0
                     and computed_brightness > 0):
-                    self._update_needed = True
+                    needs_continuous_update = True
+            
+            # Set update flag based on whether any group needs continuous updates
+            if needs_continuous_update:
+                self._update_needed = True
             
             # Force one more update if requested (e.g., after palette change)
             if self._force_next_update:

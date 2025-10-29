@@ -57,7 +57,8 @@ def main():
 
     if args.dev:
         # Development mode: use Flask-SocketIO's built-in server
-        app.socketio.run(app, host=args.host, port=args.port, debug=True)
+        # Disable auto-reload to prevent settings loss and animation interruption
+        app.socketio.run(app, host=args.host, port=args.port, debug=True, use_reloader=False)
     else:
         # Production mode: use bjoern (note: bjoern doesn't support WebSockets natively)
         # For WebSocket support in production, consider using eventlet or gevent
