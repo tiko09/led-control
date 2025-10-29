@@ -2,8 +2,9 @@
 # -*- coding: utf-8 -*-
 
 import sys, io, os, subprocess
+import shutil
 from setuptools import find_packages, setup, Extension
-from setuptools.command.build_ext import build_ext
+from setuptools.command.build_ext import build_ext as _build_ext
 
 def is_raspberrypi():
     try:
@@ -13,6 +14,32 @@ def is_raspberrypi():
     except Exception:
         pass
     return False
+
+# Custom build_ext to copy .so files to the correct package directories
+class build_ext(_build_ext):
+    def run(self):
+        _build_ext.run(self)
+        # Copy .so files to package directories after building
+        if self.extensions:
+            for ext in self.extensions:
+                if ext.name == '_ledcontrol_animation_utils':
+                    self._copy_extension_to_package(ext, 'ledcontrol/driver')
+                elif ext.name == '_ledcontrol_artnet_utils':
+                    self._copy_extension_to_package(ext, 'ledcontrol')
+    
+    def _copy_extension_to_package(self, ext, package_dir):
+        """Copy the built extension to the package directory"""
+        ext_path = self.get_ext_fullpath(ext.name)
+        if os.path.exists(ext_path):
+            # Get just the filename
+            ext_filename = os.path.basename(ext_path)
+            # Target path in package directory
+            target = os.path.join(package_dir, ext_filename)
+            # Copy the file
+            shutil.copy2(ext_path, target)
+            print(f"Copied {ext_filename} to {package_dir}/")
+        else:
+            print(f"Warning: Extension {ext.name} not found at {ext_path}")
 
 requirements = [
     'Flask==2.2.2',
@@ -79,6 +106,7 @@ setup(
     install_requires=requirements,
     setup_requires=requirements,
     ext_modules=[ext for ext in [animation_utils_extension, artnet_utils_extension] if ext is not None],
+    cmdclass={'build_ext': build_ext},
     include_package_data=True,
     entry_points={
         'console_scripts': [
