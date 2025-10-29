@@ -79,7 +79,13 @@ def create_app(led_count,
     if config_file is not None:
         filename = Path(config_file)
     else:
-        filename = Path('/etc') / 'ledcontrol.json'
+        if dev:
+            # In dev mode, use local config file in current directory
+            filename = Path.cwd() / 'ledcontrol-dev.json'
+            print(f'Dev mode: Using config file at {filename}')
+        else:
+            # In production mode, use /etc
+            filename = Path('/etc') / 'ledcontrol.json'
     filename.touch(exist_ok=True)
 
     # Init controller params and custom animations from settings file
@@ -345,13 +351,16 @@ def create_app(led_count,
             "artnet_channel_offset": settings["artnet_channel_offset"],
             "artnet_group_size": settings.get("artnet_group_size", 1),
         })
-        with filename.open('w') as data_file:
-            try:
+        try:
+            with filename.open('w') as data_file:
                 json.dump(data, data_file, sort_keys=True, indent=4)
                 print(f'Saved settings to {filename}')
-            except Exception as e:
-                traceback.print_exc()
-                print(f'Could not save settings to {filename}')
+        except PermissionError:
+            print(f'ERROR: No permission to write to {filename}')
+            print('Hint: Use --config_file to specify a writable location, or run in dev mode (--dev)')
+        except Exception as e:
+            traceback.print_exc()
+            print(f'Could not save settings to {filename}: {e}')
 
     def auto_save_settings():
         'Timer for automatically saving settings'
