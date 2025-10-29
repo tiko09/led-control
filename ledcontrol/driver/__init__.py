@@ -1,6 +1,6 @@
 # led-control WS2812B LED Controller Server
 # Copyright 2021 jackw01. Released under the MIT License (see LICENSE for details).
-
+ 
 import io
 import math
 
@@ -69,8 +69,27 @@ if is_raspberrypi():
             def __init__(self, led_count, led_pin, led_freq, led_dma, led_invert, led_brightness, led_channel, strip_type):
                 # rpi5-ws2812 uses SPI, default to SPI bus 0, device 0
                 # led_pin, led_freq, led_dma are ignored as they're GPIO/PWM specific
-                self.driver = WS2812SpiDriver(spi_bus=0, spi_device=0, led_count=led_count)
-                self.strip = self.driver.get_strip()
+                try:
+                    self.driver = WS2812SpiDriver(spi_bus=0, spi_device=0, led_count=led_count)
+                    self.strip = self.driver.get_strip()
+                except FileNotFoundError as e:
+                    raise RuntimeError(
+                        "SPI device not found. Please ensure:\n"
+                        "1. SPI is enabled: Run 'sudo raspi-config' -> Interfacing Options -> SPI -> Enable\n"
+                        "2. Your user is in the 'spidev' group: Run 'sudo adduser $USER spidev' and log out/in\n"
+                        "3. The SPI device exists: Check 'ls -l /dev/spidev*'\n"
+                        "4. You're running on a Raspberry Pi 5 (older models need the old version)\n"
+                        f"Original error: {e}"
+                    ) from e
+                except PermissionError as e:
+                    raise RuntimeError(
+                        "Permission denied accessing SPI device. Please:\n"
+                        "1. Add your user to the 'spidev' group: 'sudo adduser $USER spidev'\n"
+                        "2. Log out and log back in for group changes to take effect\n"
+                        "3. Or run with sudo (not recommended for security)\n"
+                        f"Original error: {e}"
+                    ) from e
+                
                 self.led_count = led_count
                 self.strip_type = strip_type
                 self.has_white = (strip_type & 0x18000000) != 0
