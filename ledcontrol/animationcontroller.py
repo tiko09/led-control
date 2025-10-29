@@ -99,6 +99,7 @@ class AnimationController:
         self.reset_timer()
         self._time = 0
         self._update_needed = True # Is the LED state going to change this frame?
+        self._force_next_update = False # Force one more update even for static patterns
 
         # Initialize sACN / E1.31
         if enable_sacn:
@@ -145,17 +146,8 @@ class AnimationController:
                 f * (c2[2] - c1[2]) + c1[2],
             ))
         self._palette_tables[key] = palette_table
-        
-        # Force update on next frame - important for static patterns!
-        # This ensures palette changes are visible immediately
         self._update_needed = True
-        
-        # If this palette is currently active for any group, update the current table immediately
-        # This fixes the issue where palette changes don't show up in static patterns
-        for group_settings in self._settings.get('groups', {}).values():
-            if group_settings.get('palette') == key:
-                self._current_palette_table = palette_table
-                break
+        self._force_next_update = True  # Force another update even if pattern is static
 
     def calculate_palette_tables(self):
         'Calculate and store the palette lookup tables for all palettes'
@@ -463,6 +455,11 @@ class AnimationController:
                     and settings['speed'] != 0
                     and computed_brightness > 0):
                     self._update_needed = True
+            
+            # Force one more update if requested (e.g., after palette change)
+            if self._force_next_update:
+                self._update_needed = True
+                self._force_next_update = False
 
             self._led_controller.render()
             
