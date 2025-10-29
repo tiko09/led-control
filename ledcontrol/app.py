@@ -161,6 +161,9 @@ def create_app(led_count,
             else:
                 print(f'Some saved settings at {filename} are out of date or invalid. Making a backup of the old file to {filename}.error and creating a new one with default settings.')
                 shutil.copyfile(filename, filename.with_suffix('.json.error'))
+            
+            # Initialize settings as empty dict when loading fails
+            settings = {}
 
     config_defaults = {
         "enable_artnet": False,
