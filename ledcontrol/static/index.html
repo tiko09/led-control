@@ -59,8 +59,14 @@
             <span class="title-subtitle">ArtNet</span>
           </h1>
         </div>
-        
-        <nav class="main-nav" id="main">
+      </div>
+    </header>
+
+    <!-- Main Content Area - Vue mounts here -->
+    <main class="app-main" id="main">
+      <div class="content-wrapper">
+        <!-- Vue Navigation -->
+        <nav class="main-nav">
           <router-link to="/" class="nav-link" active-class="nav-link-active">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="12" cy="12" r="3"></circle>
@@ -77,13 +83,11 @@
             <span>Setup</span>
           </router-link>
         </nav>
-      </div>
-    </header>
-
-    <!-- Main Content Area -->
-    <main class="app-main">
-      <div class="content-wrapper">
-        <router-view></router-view>
+        
+        <!-- Vue Router View -->
+        <div class="vue-content">
+          <router-view></router-view>
+        </div>
       </div>
     </main>
 

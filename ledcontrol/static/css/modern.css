@@ -241,6 +241,21 @@
   margin: 0 auto;
 }
 
+/* Vue Navigation (inside main) */
+.content-wrapper .main-nav {
+  display: flex;
+  gap: 0.5rem;
+  background: var(--bg-tertiary);
+  padding: 0.25rem;
+  border-radius: 12px;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.2);
+  margin-bottom: 2rem;
+}
+
+.vue-content {
+  margin-top: 1.5rem;
+}
+
 /* Cards - Apply to existing components */
 .card,
 .control-group,
