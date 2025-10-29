@@ -145,7 +145,17 @@ class AnimationController:
                 f * (c2[2] - c1[2]) + c1[2],
             ))
         self._palette_tables[key] = palette_table
+        
+        # Force update on next frame - important for static patterns!
+        # This ensures palette changes are visible immediately
         self._update_needed = True
+        
+        # If this palette is currently active for any group, update the current table immediately
+        # This fixes the issue where palette changes don't show up in static patterns
+        for group_settings in self._settings.get('groups', {}).values():
+            if group_settings.get('palette') == key:
+                self._current_palette_table = palette_table
+                break
 
     def calculate_palette_tables(self):
         'Calculate and store the palette lookup tables for all palettes'
