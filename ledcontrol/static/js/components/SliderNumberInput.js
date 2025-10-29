@@ -23,34 +23,36 @@ export default {
     }
   },
   template: `
-    <div class="input-toplevel">
-      <span class="label">{{ label }}:
-        <span class="dim" v-if="unit.length > 0">({{ unit }})</span>
-      </span>
-      <div class="input-row">
-        <div class="input-slider-container">
-          <input
-            type="range"
-            :min="min"
-            :max="max"
-            :step="step"
-            autocomplete="off"
-            v-model="val"
-            @change="update"
-          >
+    <div class="slider-number-input">
+      <div class="slider-header">
+        <label class="slider-label">{{ label }}</label>
+        <div class="slider-value-display">
+          <span class="slider-value">{{ val }}</span>
+          <span class="slider-unit" v-if="unit.length > 0">{{ unit }}</span>
         </div>
-        <div class="input-number-container">
-          <input
-            type="number"
-            style="width:80px"
-            :min="min"
-            :max="max"
-            :step="step"
-            autocomplete="off"
-            v-model="val"
-            @change="update"
-          >
-        </div>
+      </div>
+      <div class="slider-controls">
+        <input
+          type="range"
+          class="slider-input"
+          :min="min"
+          :max="max"
+          :step="step"
+          autocomplete="off"
+          v-model="val"
+          @input="update"
+          @change="update"
+        >
+        <input
+          type="number"
+          class="number-input"
+          :min="min"
+          :max="max"
+          :step="step"
+          autocomplete="off"
+          v-model="val"
+          @change="update"
+        >
       </div>
     </div>
   `,

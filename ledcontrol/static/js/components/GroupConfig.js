@@ -32,68 +32,128 @@ export default {
     }
   },
   template: `
-    <div class="input-row input-row-top-margin input-row-bottom-margin">
-      <span class="label select-label">Name:</span>
-      <input
-        type="text"
-        autocomplete="off"
-        v-model="group.name"
-        @change="rename"
-      >
-    </div>
-    <div class="input-row input-row-top-margin">
-      <span class="label select-label">Render Mode:</span>
-      <span class="select-container">
+    <div class="group-config-form">
+      <!-- Group Name -->
+      <div class="input-group">
+        <label class="input-label">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+          </svg>
+          Group Name
+        </label>
+        <input
+          type="text"
+          class="input-modern"
+          autocomplete="off"
+          placeholder="Enter group name"
+          v-model="group.name"
+          @change="rename"
+        >
+      </div>
+
+      <!-- Render Mode -->
+      <div class="input-group">
+        <label class="input-label">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+            <line x1="8" y1="21" x2="16" y2="21"></line>
+            <line x1="12" y1="17" x2="12" y2="21"></line>
+          </svg>
+          Render Mode
+        </label>
         <select
+          class="select-modern"
           autocomplete="off"
           v-model="group.render_mode"
           @change="setTarget"
         >
           <option value="local">
-            Local (Raspberry Pi)
+            🖥️ Local (Raspberry Pi)
           </option>
           <option value="serial">
-            Serial (Raspberry Pi Pico)
+            🔌 Serial (Raspberry Pi Pico)
           </option>
           <option value="udp">
-            WiFi (Raspberry Pi Pico W)
+            📡 WiFi (Raspberry Pi Pico W)
           </option>
         </select>
-      </span>
-    </div>
-    <div class="input-row input-row-bottom-margin" v-if="group.render_mode!='local'">
-      <span class="label select-label">Render Target:</span>
-      <input
-        type="text"
-        autocomplete="off"
-        placeholder="serial port or hostname"
-        v-model="group.render_target"
-        @change="setTarget"
-      >
-    </div>
-    <div class="input-row input-row-bottom-margin">
-      <span class="label select-label">Range (LEDs):</span>
-      <input
-        class="input-inline"
-        type="number"
-        min="0"
-        max="10000"
-        step="1"
-        autocomplete="off"
-        v-model="group.range_start"
-        @change="setBounds"
-      >
-      <span class="label select-label"> to </span>
-      <input
-        class="input-inline"
-        type="number"
-        min="0"
-        max="10000"
-        step="1"
-        autocomplete="off"
-        v-model="group.range_end"
-        @change="setBounds"
-      >
+      </div>
+
+      <!-- Render Target (conditional) -->
+      <div class="input-group" v-if="group.render_mode !== 'local'">
+        <label class="input-label">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="2" y1="12" x2="22" y2="12"></line>
+            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+          </svg>
+          Render Target
+          <span class="label-badge">{{ group.render_mode === 'serial' ? 'Port' : 'Hostname' }}</span>
+        </label>
+        <input
+          type="text"
+          class="input-modern"
+          autocomplete="off"
+          :placeholder="group.render_mode === 'serial' ? '/dev/ttyACM0' : 'pico-w.local'"
+          v-model="group.render_target"
+          @change="setTarget"
+        >
+        <span class="input-hint">
+          {{ group.render_mode === 'serial' ? 'Serial port path (e.g., /dev/ttyACM0)' : 'Network hostname or IP address' }}
+        </span>
+      </div>
+
+      <!-- LED Range -->
+      <div class="input-group">
+        <label class="input-label">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="8" y1="6" x2="21" y2="6"></line>
+            <line x1="8" y1="12" x2="21" y2="12"></line>
+            <line x1="8" y1="18" x2="21" y2="18"></line>
+            <line x1="3" y1="6" x2="3.01" y2="6"></line>
+            <line x1="3" y1="12" x2="3.01" y2="12"></line>
+            <line x1="3" y1="18" x2="3.01" y2="18"></line>
+          </svg>
+          LED Range
+          <span class="label-badge">{{ group.range_end - group.range_start }} LEDs</span>
+        </label>
+        <div class="range-inputs">
+          <div class="range-input-wrapper">
+            <span class="range-label">Start</span>
+            <input
+              type="number"
+              class="input-modern input-compact"
+              min="0"
+              max="10000"
+              step="1"
+              autocomplete="off"
+              v-model.number="group.range_start"
+              @change="setBounds"
+            >
+          </div>
+          <svg class="range-arrow" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+            <polyline points="12 5 19 12 12 19"></polyline>
+          </svg>
+          <div class="range-input-wrapper">
+            <span class="range-label">End</span>
+            <input
+              type="number"
+              class="input-modern input-compact"
+              min="0"
+              max="10000"
+              step="1"
+              autocomplete="off"
+              v-model.number="group.range_end"
+              @change="setBounds"
+            >
+          </div>
+        </div>
+        <span class="input-hint">
+          Define the LED strip range for this group (0-based indexing)
+        </span>
+      </div>
     </div>
   `,
 };

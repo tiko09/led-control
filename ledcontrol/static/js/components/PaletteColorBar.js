@@ -34,6 +34,8 @@ export default {
     }
   },
   template: `
-    <canvas ref="canvas" style="display: block; border-radius: 3px; width: 100%; height: 0.7rem; margin-bottom: 0.5rem;"></canvas>
+    <div class="palette-color-bar-wrapper">
+      <canvas ref="canvas" class="palette-color-bar"></canvas>
+    </div>
   `,
 };
