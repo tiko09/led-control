@@ -8,6 +8,7 @@ import traceback
 import RestrictedPython
 import sacn
 import collections
+import numpy as np
 from itertools import zip_longest
 from ledcontrol.intervaltimer import IntervalTimer
 
@@ -155,12 +156,9 @@ class AnimationController:
                 # Calculate scale components to determine animation position
                 # scale component = position / scale (pattern length in units)
                 # One cycle is a normalized input value's transition from 0 to 1
-                self._mappings[group] = [(
-                    (self._mapped[i][0] / scale) % 1,
-                    (self._mapped[i][1] / scale) % 1,
-                    (self._mapped[i][2] / scale) % 1
-                ) for i in range(self._led_count)]
-
+                # Store as NumPy array for faster access
+                mapped_array = np.array(self._mapped, dtype=np.float32)
+                self._mappings[group] = ((mapped_array / scale) % 1).tolist()
             else:
                 self._mappings[group] = [(0, 0, 0) for i in range(self._led_count)]
 
@@ -381,6 +379,7 @@ class AnimationController:
                         c, mode = function_1(0, 0.1, 0, 0, 0, (0, 0, 0))
 
                         # Run pattern to determine color
+                        # Enumerate over range for cleaner indexing
                         state = [function_1(time_1,
                                             delta_t_1,
                                             mapping[i][0],
