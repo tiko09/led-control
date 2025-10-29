@@ -57,7 +57,8 @@ if sys.platform.startswith('linux'):
             '_ledcontrol_artnet_utils',
             sources=['ledcontrol/artnet/ledcontrol_artnet_utils.i'],
             include_dirs=['ledcontrol/artnet'],
-            extra_compile_args=['-O3', '-ffast-math', '-std=c99'],
+            extra_compile_args=['-O3', '-std=c99'],
+            extra_link_args=['-lm'],
             swig_opts=['-python'],
         )
         print("SWIG found - C extensions will be built for maximum performance")
