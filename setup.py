@@ -54,8 +54,8 @@ if sys.platform.startswith('linux'):
         )
         artnet_utils_extension = Extension(
             '_ledcontrol_artnet_utils',
-            sources=['ledcontrol/artnet/ledcontrol_artnet_utils.i'],
-            include_dirs=['ledcontrol/artnet'],
+            sources=['ledcontrol/ledcontrol_artnet_utils.i'],
+            include_dirs=['ledcontrol'],
             extra_compile_args=['-O3', '-std=c99'],
             extra_link_args=['-lm'],
         )
