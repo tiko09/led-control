@@ -19,11 +19,11 @@ def main():
     parser.add_argument('--fps', type=int, default=60,
                         help='Refresh rate limit for LEDs, in FPS. Default: 60')
     parser.add_argument('--led_pin', type=int, default=18,
-                        help='Pin for LEDs (see https://github.com/jgarff/rpi_ws281x). Default: 18')
+                        help='Pin for LEDs. Default: 18. NOTE: On Raspberry Pi 5, this is ignored - GPIO19 (SPI MOSI) is always used.')
     parser.add_argument('--led_data_rate', type=int, default=800000,
-                        help='Data rate for LEDs. Default: 800000 Hz')
+                        help='Data rate for LEDs. Default: 800000 Hz. NOTE: On Raspberry Pi 5, SPI frequency is fixed at 6.5 MHz')
     parser.add_argument('--led_dma_channel', type=int, default=10,
-                        help='DMA channel for LEDs. DO NOT USE CHANNEL 5 ON Pi 3 B. Default: 10')
+                        help='DMA channel for LEDs. DO NOT USE CHANNEL 5 ON Pi 3 B. Default: 10. NOTE: On Raspberry Pi 5, this is ignored - SPI does not use DMA')
     parser.add_argument('--led_pixel_order', default='GRB',
                         help='LED color channel order. Any combination of RGB with or without a W at the end. Default: GRB, try GRBW for SK6812')
     parser.add_argument('--led_brightness_limit', type=float, default=1.0,

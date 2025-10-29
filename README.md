@@ -39,14 +39,17 @@ Obtain a WS2812B or SK6812B LED strip (**SK6812 RGB/White LEDs are highly recomm
 Any GPIO pin can be used instead of GPIO12 if the definition in `firmware/config.h` is changed appropriately.
 
 ### Hardware Setup (Raspberry Pi)
-1. Obtain a Raspberry Pi single-board computer (any model). Due to the unavailability of Raspberry Pis, using any other computer with an external LED driver is recommended (see above).
+1. Obtain a Raspberry Pi single-board computer. **Note:** Raspberry Pi 5 requires different setup (see below).
 2. Connect the LED strip to your Raspberry Pi:
     - Pi GND to LED GND
-    - Pi GPIO18 to LED Data in
+    - **Raspberry Pi 5**: Pi GPIO19 (Pin 35, MOSI) to LED Data in
+    - **Raspberry Pi 4 and earlier**: Pi GPIO18 to LED Data in
     - Power supply ground to LED GND
     - Power supply 5V to LED 5V
 
-For more information on which Raspberry Pi GPIO pins LED strips can be connected to, see [here](https://github.com/jgarff/rpi_ws281x).
+**Important for Raspberry Pi 5:** This project uses [rpi5-ws2812](https://github.com/niklasr22/rpi5-ws2812) which communicates via SPI interface. The LED strip **must** be connected to GPIO19 (Pin 35, MOSI). SPI must be enabled in `raspi-config`.
+
+For Raspberry Pi 4 and earlier models, see [rpi_ws281x](https://github.com/jgarff/rpi_ws281x) for information on which GPIO pins can be used.
 
 #### RGBW LEDs Are Highly Recommended
 Know what you're doing with electricity. Addressable LEDs can draw a lot of current, especially in long strips. You should use RGBW LEDs for the reason that **they look better and require much less power** when displaying whiter colors (a good quality 5V 4A power supply can comfortably handle 150 RGBW LEDs at full brightness).
@@ -76,18 +79,51 @@ Python 3.7 or newer is required.
 9. Determine the serial port ID of your microcontroller. On Windows, this can be done through Device Manager.
 10. `ledcontrol --led_count NUMBER_OF_LEDS_HERE --serial_port SERIAL_PORT_HERE` (add `--led_pixel_order GRBW` if using RGBW LEDs)
 
-### Software Setup (Raspberry Pi)
+### Software Setup (Raspberry Pi 5)
 Python 3.7 or newer is required.
 
-1. `sudo apt-get install scons swig libev-dev python3-dev python3-setuptools git python3-pip`
-2. `git clone --recurse-submodules https://github.com/jackw01/led-control.git`
+1. **Enable SPI interface:**
+   ```bash
+   sudo raspi-config
+   ```
+   Navigate to `Interfacing Options` → `SPI` and enable it.
+
+2. **Optional:** Add your user to the `spidev` group to avoid running as root:
+   ```bash
+   sudo adduser $USER spidev
+   ```
+   Log out and back in for the change to take effect.
+
+3. **Install the software:**
+   ```bash
+   sudo apt-get install libev-dev python3-dev python3-setuptools git python3-pip
+   git clone https://github.com/jackw01/led-control.git
+   cd led-control
+   git checkout PI5
+   sudo python3 setup.py develop
+   ```
+
+4. **Run:**
+   ```bash
+   sudo ledcontrol --led_count NUMBER_OF_LEDS_HERE
+   ```
+   Add `--led_pixel_order GRBW` if using RGBW LEDs (e.g., SK6812).
+
+### Software Setup (Raspberry Pi 4 and Earlier)
+Python 3.7 or newer is required.
+
+1. `sudo apt-get install libev-dev python3-dev python3-setuptools git python3-pip`
+2. `git clone https://github.com/jackw01/led-control.git`
 3. `cd led-control`
-4. `git checkout tags/v2.1.1`
+4. `git checkout tags/v2.1.1`  *(use older version with rpi_ws281x support)*
 5. `sudo python3 setup.py develop`
 6. `sudo ledcontrol --led_count NUMBER_OF_LEDS_HERE` (add `--led_pixel_order GRBW` if using RGBW LEDs)
 
 #### Common Issues
-LEDControl and the Raspberry Pi audio subsystem cannot be use together since they both use the PWM hardware. On some Linux distributions, you must disable the audio kernel module by commenting out the line `dtparam=audio=on` in `/boot/config.txt` or by creating a file `/etc/modprobe.d/snd-blacklist.conf` with the contents `blacklist snd_bcm2835`.
+
+**Raspberry Pi 4 and earlier:** LEDControl and the Raspberry Pi audio subsystem cannot be used together since they both use the PWM hardware. On some Linux distributions, you must disable the audio kernel module by commenting out the line `dtparam=audio=on` in `/boot/config.txt` or by creating a file `/etc/modprobe.d/snd-blacklist.conf` with the contents `blacklist snd_bcm2835`.
+
+**Raspberry Pi 5:** No audio conflicts as SPI is used instead of PWM. However, ensure SPI is enabled and the LED strip is connected to GPIO19 (Pin 35, MOSI).
 
 ### Command Line Configuration Arguments
 Web server and LED hardware parameters must be specified as command line arguments when running ledcontrol. Note that none of the LED hardware-related arguments will have an effect when using a Pi Pico to drive the LEDs.
@@ -113,13 +149,16 @@ optional arguments:
   --pixel_mapping_json PIXEL_MAPPING_JSON
                         JSON file containing pixel mapping (see README)
   --fps FPS             Refresh rate limit for LEDs, in FPS. Default: 60
-  --led_pin LED_PIN     Pin for LEDs (see
-                        https://github.com/jgarff/rpi_ws281x). Default: 18
+  --led_pin LED_PIN     Pin for LEDs. Default: 18
+                        NOTE: On Raspberry Pi 5, this is ignored - GPIO19 (SPI MOSI) is always used.
+                        See https://github.com/niklasr22/rpi5-ws2812
   --led_data_rate LED_DATA_RATE
                         Data rate for LEDs. Default: 800000 Hz
+                        NOTE: On Raspberry Pi 5, SPI frequency is fixed at 6.5 MHz
   --led_dma_channel LED_DMA_CHANNEL
                         DMA channel for LEDs. DO NOT USE CHANNEL 5 ON Pi 3 B.
                         Default: 10
+                        NOTE: On Raspberry Pi 5, this is ignored - SPI doesn't use DMA
   --led_pixel_order LED_PIXEL_ORDER
                         LED color channel order. Any combination of RGB with
                         or without a W at the end. Default: GRB, try GRBW for

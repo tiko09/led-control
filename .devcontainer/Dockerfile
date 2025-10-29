@@ -7,5 +7,5 @@ FROM mcr.microsoft.com/vscode/devcontainers/python:0-${VARIANT}
 RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
     && apt-get -y install --no-install-recommends python3-venv gnupg2
 
-RUN apt-get -y install scons swig python3-dev python3-setuptools
+RUN apt-get -y install python3-dev python3-setuptools
 
