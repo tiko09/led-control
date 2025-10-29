@@ -207,7 +207,14 @@ def create_app(led_count,
     artnet_server = None
 
     def set_led(data: bytes, index: int):
+        """Set LED data from ArtNet Server and notify visualizer"""
         leds.set_pixels_from_flat(data, index)
+        
+        # Send to visualizer if connected and ArtNet is active
+        if visualizer and artnet_server:
+            # ArtNet data is already in RGB format (RGBW bytes)
+            # Convert bytearray to list of RGB values for visualization
+            visualizer.update_pixels(data, led_count, 'rgb')
 
     def stop_current_animation():
         controller.end_animation()
@@ -453,7 +460,12 @@ def create_app(led_count,
         else:
             app.logger.debug("ArtNet deaktiviert")
             controller.clear_leds()
-            controller.begin_animation_thread()
+            # Only start animation thread if not already running
+            if not controller.is_animation_running():
+                app.logger.debug("Starte Animation Thread")
+                controller.begin_animation_thread()
+            else:
+                app.logger.debug("Animation Thread läuft bereits")
         save_settings()
         return {"status": "ok"}
 

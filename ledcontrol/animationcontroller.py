@@ -115,6 +115,10 @@ class AnimationController:
         self._visualizer = visualizer
         print('LED Visualizer connected to animation controller')
 
+    def is_animation_running(self):
+        """Check if animation thread is currently running"""
+        return self._timer is not None and self._timer._thread.is_alive()
+
     # Computing cached values
 
     def calculate_palette_table(self, key):
