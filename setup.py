@@ -27,76 +27,44 @@ requirements = [
     ['rpi5-ws2812'] if is_raspberrypi() else ['pyfastnoisesimd>=0.4.2']
 )
 
-# SWIG extension for animation utilities (performance-critical functions)
+# SWIG extensions for performance-critical functions
 animation_utils_extension = None
-
-class SwigBuildExt(build_ext):
-    """Custom build_ext to run SWIG if available"""
-    def run(self):
-        # Check if SWIG is available
-        try:
-            subprocess.check_call(['swig', '-version'], 
-                                 stdout=subprocess.DEVNULL, 
-                                 stderr=subprocess.DEVNULL)
-            has_swig = True
-        except (subprocess.CalledProcessError, FileNotFoundError):
-            has_swig = False
-            print("Warning: SWIG not found. C extensions will not be built.")
-            print("Install SWIG with: sudo apt-get install swig (or equivalent)")
-            print("The software will work with Python fallback implementations.")
-        
-        if has_swig:
-            swig_targets = [
-                ('ledcontrol/driver/ledcontrol_animation_utils.i',
-                 'ledcontrol/driver/ledcontrol_animation_utils_wrap.c',
-                 'animation utilities'),
-                ('ledcontrol/artnet/ledcontrol_artnet_utils.i',
-                 'ledcontrol/artnet/ledcontrol_artnet_utils_wrap.c',
-                 'ArtNet spatial smoothing')
-            ]
-            
-            all_success = True
-            for swig_input, swig_output, description in swig_targets:
-                if not os.path.exists(swig_input):
-                    continue  # Skip if .i file doesn't exist
-                    
-                swig_cmd = [
-                    'swig',
-                    '-python',
-                    '-o', swig_output,
-                    swig_input
-                ]
-                try:
-                    subprocess.check_call(swig_cmd)
-                    print(f"SWIG generated {description} wrapper successfully")
-                except subprocess.CalledProcessError as e:
-                    print(f"Warning: SWIG failed for {description}: {e}")
-                    all_success = False
-            
-            if all_success:
-                # Continue with normal build
-                super().run()
-            else:
-                print("Some SWIG generations failed. Skipping extension build.")
-        else:
-            print("Skipping C extension build (SWIG not available)")
-
-# Only build extensions if we're on a system with a compiler
-# The extensions provide better performance but are not required
 artnet_utils_extension = None
+
+# Only build extensions if we're on a system with a compiler and SWIG
+# The extensions provide better performance but are not required
 if sys.platform.startswith('linux'):
-    animation_utils_extension = Extension(
-        '_ledcontrol_animation_utils',
-        sources=['ledcontrol/driver/ledcontrol_animation_utils_wrap.c'],
-        include_dirs=['ledcontrol/driver'],
-        extra_compile_args=['-O3', '-ffast-math', '-std=c99'],
-    )
-    artnet_utils_extension = Extension(
-        '_ledcontrol_artnet_utils',
-        sources=['ledcontrol/artnet/ledcontrol_artnet_utils_wrap.c'],
-        include_dirs=['ledcontrol/artnet'],
-        extra_compile_args=['-O3', '-ffast-math', '-std=c99'],
-    )
+    # Check if SWIG is available
+    has_swig = False
+    try:
+        subprocess.check_call(['swig', '-version'], 
+                             stdout=subprocess.DEVNULL, 
+                             stderr=subprocess.DEVNULL)
+        has_swig = True
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        pass
+    
+    if has_swig:
+        # Use .i files directly - setuptools will run SWIG automatically
+        animation_utils_extension = Extension(
+            '_ledcontrol_animation_utils',
+            sources=['ledcontrol/driver/ledcontrol_animation_utils.i'],
+            include_dirs=['ledcontrol/driver'],
+            extra_compile_args=['-O3', '-ffast-math', '-std=c99'],
+            swig_opts=['-python'],
+        )
+        artnet_utils_extension = Extension(
+            '_ledcontrol_artnet_utils',
+            sources=['ledcontrol/artnet/ledcontrol_artnet_utils.i'],
+            include_dirs=['ledcontrol/artnet'],
+            extra_compile_args=['-O3', '-ffast-math', '-std=c99'],
+            swig_opts=['-python'],
+        )
+        print("SWIG found - C extensions will be built for maximum performance")
+    else:
+        print("Warning: SWIG not found. C extensions will not be built.")
+        print("Install SWIG with: sudo apt-get install swig")
+        print("The software will work with Python fallback implementations.")
 
 setup(
     name='led-control',
@@ -118,7 +86,6 @@ setup(
             'ledcontrol=ledcontrol:main'
         ]
     },
-    cmdclass={'build_ext': SwigBuildExt} if (animation_utils_extension or artnet_utils_extension) else {},
     license='MIT',
     classifiers=[
         # Trove classifiers
