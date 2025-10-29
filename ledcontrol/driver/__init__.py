@@ -13,28 +13,61 @@ def is_raspberrypi():
         pass
     return False
 
-# Always import utility functions from driver_non_raspberry_pi
+# Always import utility functions - prefer C extension for performance, fallback to Python
 # These are needed for animation calculations regardless of platform
 try:
-    import pyfastnoisesimd as fns
-    # Import all utility functions that are used by animationcontroller.py
-    from .driver_non_raspberry_pi import (
-        float_to_int_1000,
-        float_to_int_1000_mirror,
-        wave_pulse,
-        wave_triangle,
-        wave_sine,
-        wave_cubic,
-        plasma_sines,
-        plasma_sines_octave,
-        perlin_noise_3d,
-        fbm_noise_3d,
-        blackbody_to_rgb,
-        blackbody_correction_rgb
-    )
-except ImportError:
-    # pyfastnoisesimd not available (expected on Raspberry Pi)
-    # Define simplified versions of these functions
+    # Try to import the C extension first (best performance)
+    from . import ledcontrol_animation_utils as c_utils
+    
+    # Wrap C functions for consistent API
+    float_to_int_1000 = c_utils.float_to_int_1000
+    float_to_int_1000_mirror = c_utils.float_to_int_1000_mirror
+    wave_pulse = c_utils.wave_pulse
+    wave_triangle = c_utils.wave_triangle
+    wave_sine = c_utils.wave_sine
+    wave_cubic = c_utils.wave_cubic
+    plasma_sines = c_utils.plasma_sines
+    plasma_sines_octave = c_utils.plasma_sines_octave
+    perlin_noise_3d = c_utils.perlin_noise_3d
+    fbm_noise_3d = c_utils.fbm_noise_3d
+    
+    def blackbody_to_rgb(kelvin):
+        """Wrapper for C function that returns a list instead of struct"""
+        result = c_utils.blackbody_to_rgb(kelvin)
+        return [result.r, result.g, result.b]
+    
+    def blackbody_correction_rgb(rgb, kelvin):
+        """Wrapper for C function"""
+        # Convert Python list to C struct-like input
+        bb = c_utils.blackbody_to_rgb(kelvin)
+        return [rgb[0] * bb.r, rgb[1] * bb.g, rgb[2] * bb.b]
+    
+    print("Using C extension for animation utilities (high performance)")
+    
+except ImportError as e:
+    # C extension not available, try Python with pyfastnoisesimd
+    try:
+        import pyfastnoisesimd as fns
+        # Import all utility functions that are used by animationcontroller.py
+        from .driver_non_raspberry_pi import (
+            float_to_int_1000,
+            float_to_int_1000_mirror,
+            wave_pulse,
+            wave_triangle,
+            wave_sine,
+            wave_cubic,
+            plasma_sines,
+            plasma_sines_octave,
+            perlin_noise_3d,
+            fbm_noise_3d,
+            blackbody_to_rgb,
+            blackbody_correction_rgb
+        )
+        print("Using Python implementation with pyfastnoisesimd for animation utilities")
+    except ImportError:
+        # pyfastnoisesimd not available either (expected on Raspberry Pi without C extension)
+        # Define simplified versions of these functions
+        print("Warning: Using simplified Python fallback for animation utilities (reduced performance)")
     def float_to_int_1000(t):
         return int(t * 999.9) % 1000
     

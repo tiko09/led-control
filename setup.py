@@ -1,8 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import sys, io
-from setuptools import find_packages, setup
+import sys, io, os, subprocess
+from setuptools import find_packages, setup, Extension
+from setuptools.command.build_ext import build_ext
 
 def is_raspberrypi():
     try:
@@ -26,6 +27,55 @@ requirements = [
     ['rpi5-ws2812'] if is_raspberrypi() else ['pyfastnoisesimd>=0.4.2']
 )
 
+# SWIG extension for animation utilities (performance-critical functions)
+animation_utils_extension = None
+
+class SwigBuildExt(build_ext):
+    """Custom build_ext to run SWIG if available"""
+    def run(self):
+        # Check if SWIG is available
+        try:
+            subprocess.check_call(['swig', '-version'], 
+                                 stdout=subprocess.DEVNULL, 
+                                 stderr=subprocess.DEVNULL)
+            has_swig = True
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            has_swig = False
+            print("Warning: SWIG not found. Animation utilities C extension will not be built.")
+            print("Install SWIG with: sudo apt-get install swig (or equivalent)")
+            print("The software will work with Python fallback implementations.")
+        
+        if has_swig:
+            # Run SWIG to generate wrapper
+            swig_cmd = [
+                'swig',
+                '-python',
+                '-o', 'ledcontrol/driver/ledcontrol_animation_utils_wrap.c',
+                'ledcontrol/driver/ledcontrol_animation_utils.i'
+            ]
+            try:
+                subprocess.check_call(swig_cmd)
+                print("SWIG generated animation utilities wrapper successfully")
+            except subprocess.CalledProcessError as e:
+                print(f"Warning: SWIG failed: {e}")
+                print("The software will work with Python fallback implementations.")
+                return
+            
+            # Continue with normal build
+            super().run()
+        else:
+            print("Skipping C extension build (SWIG not available)")
+
+# Only build extension if we're on a system with a compiler
+# The extension provides better performance but is not required
+if sys.platform.startswith('linux'):
+    animation_utils_extension = Extension(
+        '_ledcontrol_animation_utils',
+        sources=['ledcontrol/driver/ledcontrol_animation_utils_wrap.c'],
+        include_dirs=['ledcontrol/driver'],
+        extra_compile_args=['-O3', '-ffast-math', '-std=c99'],
+    )
+
 setup(
     name='led-control',
     version='2.0.0',
@@ -39,14 +89,14 @@ setup(
     zip_safe=False,
     install_requires=requirements,
     setup_requires=requirements,
-    ext_modules=[],  # No C extensions needed anymore
+    ext_modules=[animation_utils_extension] if animation_utils_extension else [],
     include_package_data=True,
     entry_points={
         'console_scripts': [
             'ledcontrol=ledcontrol:main'
         ]
     },
-    cmdclass={},  # No custom install commands needed
+    cmdclass={'build_ext': SwigBuildExt} if animation_utils_extension else {},
     license='MIT',
     classifiers=[
         # Trove classifiers

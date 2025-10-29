@@ -115,3 +115,7 @@ accessory.state
 cmake-*
 config.json
 firmware/wifi_config.h
+
+# SWIG generated files
+ledcontrol/driver/*_wrap.c
+ledcontrol/driver/ledcontrol_animation_utils.py
