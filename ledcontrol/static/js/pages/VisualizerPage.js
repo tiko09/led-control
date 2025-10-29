@@ -155,11 +155,12 @@ export default {
     },
 
     toggleBlur() {
-      this.showBlur = !this.showBlur;
+      console.log('toggleBlur called, showBlur:', this.showBlur);
       this.drawLEDs();
     },
 
     updateScale() {
+      console.log('updateScale called, ledScale:', this.ledScale);
       this.initCanvas();
       this.drawLEDs();
     }
@@ -195,7 +196,12 @@ export default {
           <div class="visualizer-controls">
             <div class="control-group">
               <label class="toggle-label">
-                <input type="checkbox" class="toggle-input" v-model="showBlur" @change="toggleBlur">
+                <input 
+                  type="checkbox" 
+                  class="toggle-input" 
+                  v-model="showBlur" 
+                  @change="toggleBlur"
+                >
                 <span class="toggle-slider"></span>
                 <span class="toggle-text">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
