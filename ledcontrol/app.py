@@ -180,11 +180,19 @@ def create_app(led_count,
         settings.setdefault(k, v)
 
     # Restore ArtNet parameters from root if present (for backward compatibility)
-    for k in ("enable_artnet", "artnet_universe", "artnet_channel_offset", "artnet_group_size", "artnet_smoothing", "artnet_filter_size"):
-        if k in json.loads(settings_str):
-            settings[k] = json.loads(settings_str)[k]
-        elif k in config_defaults and k not in settings:
-            settings[k] = config_defaults[k]
+    if settings_str:  # Only parse if settings_str is not empty
+        try:
+            root_settings = json.loads(settings_str)
+            for k in ("enable_artnet", "artnet_universe", "artnet_channel_offset", "artnet_group_size", "artnet_smoothing", "artnet_filter_size"):
+                if k in root_settings:
+                    settings[k] = root_settings[k]
+                elif k in config_defaults and k not in settings:
+                    settings[k] = config_defaults[k]
+        except json.JSONDecodeError:
+            # If parsing fails, just use defaults
+            for k in ("enable_artnet", "artnet_universe", "artnet_channel_offset", "artnet_group_size", "artnet_smoothing", "artnet_filter_size"):
+                if k in config_defaults and k not in settings:
+                    settings[k] = config_defaults[k]
 
     artnet_server = None
 
