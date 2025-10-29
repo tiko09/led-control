@@ -408,15 +408,12 @@ class AnimationController:
                             settings['render_mode'],
                             settings['render_target']
                         )
-                        
-                        # Send to visualizer if enabled (only for main group to avoid duplicates)
-                        if self._visualizer and group == 'main':
-                            self._visualizer.update_pixels(state, range_end - range_start, 
-                                                          'hsv' if mode == animfunctions.ColorMode.hsv else 'rgb')
 
                     else:
+                        # sACN/E1.31 mode
+                        sacn_slice = self._sacn_buffer[range_start:range_end]
                         self._led_controller.set_range(
-                            self._sacn_buffer[range_start:range_end],
+                            sacn_slice,
                             range_start,
                             range_end,
                             self._correction,
@@ -426,11 +423,6 @@ class AnimationController:
                             settings['render_mode'],
                             settings['render_target']
                         )
-                        
-                        # Send sACN data to visualizer if enabled
-                        if self._visualizer and group == 'main':
-                            self._visualizer.update_pixels(self._sacn_buffer[range_start:range_end], 
-                                                          range_end - range_start, 'rgb')
 
                 except Exception as e:
                     msg = traceback.format_exception(type(e), e, e.__traceback__)
@@ -459,6 +451,28 @@ class AnimationController:
                     self._update_needed = True
 
             self._led_controller.render()
+            
+            # Send complete LED state to visualizer after rendering all groups
+            if self._visualizer:
+                if self._settings['sacn'] == 1:
+                    # In sACN mode, use the sACN buffer
+                    self._visualizer.update_pixels(
+                        self._sacn_buffer[:self._led_count],
+                        self._led_count,
+                        'rgb'
+                    )
+                else:
+                    # In pattern mode, use _prev_state (which contains all groups)
+                    # Determine the mode from the first group's function
+                    first_group_settings = list(self._settings['groups'].values())[0]
+                    if first_group_settings['function'] in self._functions:
+                        function = self._functions[first_group_settings['function']]
+                        _, mode = function(0, 0.1, 0, 0, 0, (0, 0, 0))
+                        self._visualizer.update_pixels(
+                            self._prev_state[:self._led_count],
+                            self._led_count,
+                            'hsv' if mode == animfunctions.ColorMode.hsv else 'rgb'
+                        )
 
     def _sacn_callback(self, packet):
         'Callback for sACN / E1.31 client'
