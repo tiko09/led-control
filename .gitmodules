@@ -1,4 +1,0 @@
-[submodule "ledcontrol/driver/rpi_ws281x"]
-	path = ledcontrol/driver/rpi_ws281x
-	url = https://github.com/jgarff/rpi_ws281x.git
-    branch = pi5

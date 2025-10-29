@@ -2,25 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import sys, io
-from setuptools import find_packages, setup, Extension
-from setuptools.command.develop import develop
-from setuptools.command.install import install
-from subprocess import check_call
-
-def pre_install():
-    print('preinstall')
-    if is_raspberrypi():
-        check_call('scons', cwd='ledcontrol/driver/rpi_ws281x/')
-
-class PreDevelopCommand(develop):
-    def run(self):
-        pre_install()
-        develop.run(self)
-
-class PreInstallCommand(install):
-    def run(self):
-        pre_install()
-        install.run(self)
+from setuptools import find_packages, setup
 
 def is_raspberrypi():
     try:
@@ -40,15 +22,9 @@ requirements = [
     'numpy==1.26.4',
     'pyserial>=3.5',
     'Werkzeug==2.2.2',
-] + (['bjoern>=3.2.1'] if sys.platform.startswith('linux') else []) + (['pyfastnoisesimd>=0.4.2'] if not is_raspberrypi() else [])
-
-extensions = [
-    Extension('_ledcontrol_rpi_ws281x_driver',
-              sources=['ledcontrol/driver/ledcontrol_rpi_ws281x_driver_wrap.c'],
-              include_dirs=['ledcontrol/driver'],
-              library_dirs=['ledcontrol/driver/rpi_ws281x/'],
-              libraries=['ws2811'])
-]
+] + (['bjoern>=3.2.1'] if sys.platform.startswith('linux') else []) + (
+    ['rpi5-ws2812'] if is_raspberrypi() else ['pyfastnoisesimd>=0.4.2']
+)
 
 setup(
     name='led-control',
@@ -63,17 +39,14 @@ setup(
     zip_safe=False,
     install_requires=requirements,
     setup_requires=requirements,
-    ext_modules=extensions if is_raspberrypi() else [],
+    ext_modules=[],  # No C extensions needed anymore
     include_package_data=True,
     entry_points={
         'console_scripts': [
             'ledcontrol=ledcontrol:main'
         ]
     },
-    cmdclass={
-        'develop': PreDevelopCommand,
-        'install': PreInstallCommand,
-    },
+    cmdclass={},  # No custom install commands needed
     license='MIT',
     classifiers=[
         # Trove classifiers
