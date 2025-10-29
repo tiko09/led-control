@@ -6,7 +6,16 @@ import logging
 import math
 from queue import Queue, Empty
 from typing import Callable, Optional
-import time  # (oben ergänzen)
+import time
+
+# Try to import C extension for high-performance spatial smoothing
+try:
+    from ledcontrol.artnet import ledcontrol_artnet_utils as c_artnet
+    HAS_C_ARTNET = True
+    print("Using C extension for ArtNet spatial smoothing (high performance)")
+except ImportError:
+    HAS_C_ARTNET = False
+    print("C extension not available for ArtNet, using Python fallback")
 
 ARTNET_PORT = 6454
 ARTNET_HEADER = b'Art-Net\x00'
@@ -153,56 +162,79 @@ class ArtNetServer:
 
         # --- Spatial Smoothing über Nachbar-LEDs ---
         if self.spatial_smoothing != "none" and self.spatial_size > 1:
-            cpl = self.channels_per_led
             n_leds = phys_used
             window = self.spatial_size
-            #check if window is uneven if not expand by one
-            if window % 2 == 0:
-                window += 1
-            half = window // 2
-            smoothed = bytearray()
             
-            # build filter Kernel based on specified window size and filter function
-            if self.spatial_smoothing == "average":
-                kernel = [1.0 / window] * window
-            elif self.spatial_smoothing == "lerp":
-                center = window // 2
-                raw_kernel = [window - abs(i - center) for i in range(window)]
-                kernel_sum = sum(raw_kernel)
-                kernel = [k / kernel_sum for k in raw_kernel]
-            elif self.spatial_smoothing == "gaussian":
-                # Gauß-Kernel berechnen (sigma proportional zu window)
-                center = window // 2
-                sigma = max(1.0, window / 4.0)
-                kernel = [math.exp(-0.5 * ((i - center) / sigma) ** 2) for i in range(window)]
-                kernel_sum = sum(kernel)
-                kernel = [k / kernel_sum for k in kernel]
-            else:
-                kernel = [1.0 / window] * window  # fallback
-
-            # print the kernel
-            self.log.debug("Spatial Smoothing Kernel: %s", kernel)
-
-            #itterate of all leds
-            for i in range(n_leds):
-                acc = [0, 0, 0, 0]
-                # apply kernel
-                for k in range(len(kernel)):
-                    neighbor_idx = i + (k - half)
-                    if 0 <= neighbor_idx < n_leds:
-                        base = neighbor_idx * cpl
-                        r = expanded[base]
-                        g = expanded[base + 1]
-                        b = expanded[base + 2]
-                        w = expanded[base + 3] if cpl == 4 else 0
-                        weight = kernel[k]
-                        acc[0] += r * weight
-                        acc[1] += g * weight
-                        acc[2] += b * weight
-                        acc[3] += w * weight
-                smoothed.extend((int(acc[0]), int(acc[1]), int(acc[2]), int(acc[3])))
+            if HAS_C_ARTNET:
+                # Use high-performance C extension
+                smoothing_type_map = {
+                    "average": 0,
+                    "lerp": 1,
+                    "gaussian": 2
+                }
+                smoothing_type = smoothing_type_map.get(self.spatial_smoothing, 0)
                 
-            expanded = smoothed
+                # Allocate output buffer
+                smoothed = bytearray(n_leds * 4)
+                
+                # Call C function
+                c_artnet.spatial_smooth_rgbw_py(
+                    bytes(expanded), smoothed,
+                    n_leds, window, smoothing_type
+                )
+                
+                expanded = smoothed
+            else:
+                # Python fallback
+                cpl = self.channels_per_led
+                #check if window is uneven if not expand by one
+                if window % 2 == 0:
+                    window += 1
+                half = window // 2
+                smoothed = bytearray()
+                
+                # build filter Kernel based on specified window size and filter function
+                if self.spatial_smoothing == "average":
+                    kernel = [1.0 / window] * window
+                elif self.spatial_smoothing == "lerp":
+                    center = window // 2
+                    raw_kernel = [window - abs(i - center) for i in range(window)]
+                    kernel_sum = sum(raw_kernel)
+                    kernel = [k / kernel_sum for k in raw_kernel]
+                elif self.spatial_smoothing == "gaussian":
+                    # Gauß-Kernel berechnen (sigma proportional zu window)
+                    center = window // 2
+                    sigma = max(1.0, window / 4.0)
+                    kernel = [math.exp(-0.5 * ((i - center) / sigma) ** 2) for i in range(window)]
+                    kernel_sum = sum(kernel)
+                    kernel = [k / kernel_sum for k in kernel]
+                else:
+                    kernel = [1.0 / window] * window  # fallback
+
+                # print the kernel
+                self.log.debug("Spatial Smoothing Kernel: %s", kernel)
+
+                #itterate of all leds
+                for i in range(n_leds):
+                    acc = [0, 0, 0, 0]
+                    # apply kernel
+                    for k in range(len(kernel)):
+                        neighbor_idx = i + (k - half)
+                        if 0 <= neighbor_idx < n_leds:
+                            base = neighbor_idx * cpl
+                            r = expanded[base]
+                            g = expanded[base + 1]
+                            b = expanded[base + 2]
+                            w = expanded[base + 3] if cpl == 4 else 0
+                            weight = kernel[k]
+                            acc[0] += r * weight
+                            acc[1] += g * weight
+                            acc[2] += b * weight
+                            acc[3] += w * weight
+                    smoothed.extend((int(acc[0]), int(acc[1]), int(acc[2]), int(acc[3])))
+                    
+                expanded = smoothed
+            
             if expanded:
                 self.set_led_rgbw(expanded, 0)
 

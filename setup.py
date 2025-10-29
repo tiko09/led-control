@@ -41,38 +41,60 @@ class SwigBuildExt(build_ext):
             has_swig = True
         except (subprocess.CalledProcessError, FileNotFoundError):
             has_swig = False
-            print("Warning: SWIG not found. Animation utilities C extension will not be built.")
+            print("Warning: SWIG not found. C extensions will not be built.")
             print("Install SWIG with: sudo apt-get install swig (or equivalent)")
             print("The software will work with Python fallback implementations.")
         
         if has_swig:
-            # Run SWIG to generate wrapper
-            swig_cmd = [
-                'swig',
-                '-python',
-                '-o', 'ledcontrol/driver/ledcontrol_animation_utils_wrap.c',
-                'ledcontrol/driver/ledcontrol_animation_utils.i'
+            swig_targets = [
+                ('ledcontrol/driver/ledcontrol_animation_utils.i',
+                 'ledcontrol/driver/ledcontrol_animation_utils_wrap.c',
+                 'animation utilities'),
+                ('ledcontrol/artnet/ledcontrol_artnet_utils.i',
+                 'ledcontrol/artnet/ledcontrol_artnet_utils_wrap.c',
+                 'ArtNet spatial smoothing')
             ]
-            try:
-                subprocess.check_call(swig_cmd)
-                print("SWIG generated animation utilities wrapper successfully")
-            except subprocess.CalledProcessError as e:
-                print(f"Warning: SWIG failed: {e}")
-                print("The software will work with Python fallback implementations.")
-                return
             
-            # Continue with normal build
-            super().run()
+            all_success = True
+            for swig_input, swig_output, description in swig_targets:
+                if not os.path.exists(swig_input):
+                    continue  # Skip if .i file doesn't exist
+                    
+                swig_cmd = [
+                    'swig',
+                    '-python',
+                    '-o', swig_output,
+                    swig_input
+                ]
+                try:
+                    subprocess.check_call(swig_cmd)
+                    print(f"SWIG generated {description} wrapper successfully")
+                except subprocess.CalledProcessError as e:
+                    print(f"Warning: SWIG failed for {description}: {e}")
+                    all_success = False
+            
+            if all_success:
+                # Continue with normal build
+                super().run()
+            else:
+                print("Some SWIG generations failed. Skipping extension build.")
         else:
             print("Skipping C extension build (SWIG not available)")
 
-# Only build extension if we're on a system with a compiler
-# The extension provides better performance but is not required
+# Only build extensions if we're on a system with a compiler
+# The extensions provide better performance but are not required
+artnet_utils_extension = None
 if sys.platform.startswith('linux'):
     animation_utils_extension = Extension(
         '_ledcontrol_animation_utils',
         sources=['ledcontrol/driver/ledcontrol_animation_utils_wrap.c'],
         include_dirs=['ledcontrol/driver'],
+        extra_compile_args=['-O3', '-ffast-math', '-std=c99'],
+    )
+    artnet_utils_extension = Extension(
+        '_ledcontrol_artnet_utils',
+        sources=['ledcontrol/artnet/ledcontrol_artnet_utils_wrap.c'],
+        include_dirs=['ledcontrol/artnet'],
         extra_compile_args=['-O3', '-ffast-math', '-std=c99'],
     )
 
@@ -89,14 +111,14 @@ setup(
     zip_safe=False,
     install_requires=requirements,
     setup_requires=requirements,
-    ext_modules=[animation_utils_extension] if animation_utils_extension else [],
+    ext_modules=[ext for ext in [animation_utils_extension, artnet_utils_extension] if ext is not None],
     include_package_data=True,
     entry_points={
         'console_scripts': [
             'ledcontrol=ledcontrol:main'
         ]
     },
-    cmdclass={'build_ext': SwigBuildExt} if animation_utils_extension else {},
+    cmdclass={'build_ext': SwigBuildExt} if (animation_utils_extension or artnet_utils_extension) else {},
     license='MIT',
     classifiers=[
         # Trove classifiers

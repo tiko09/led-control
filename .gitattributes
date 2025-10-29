@@ -14,3 +14,5 @@ ledcontrol/static/js/vue-router.global.prod.js linguist-vendored=true
 *.i linguist-language=C
 ledcontrol/driver/*_wrap.c linguist-generated=true
 ledcontrol/driver/ledcontrol_animation_utils.py linguist-generated=true
+ledcontrol/artnet/*_wrap.c linguist-generated=true
+ledcontrol/artnet/ledcontrol_artnet_utils.py linguist-generated=true
