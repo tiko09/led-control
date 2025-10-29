@@ -4,7 +4,6 @@
 import atexit
 import serial
 import numpy as np
-import itertools
 import socket
 import traceback
 from enum import Enum
@@ -128,13 +127,14 @@ class LEDController:
                                                          correction, saturation,  brightness, 1.0,
                                                          self._has_white)
         else:
-            data = np.fromiter(itertools.chain.from_iterable(pixels), np.float32)
+            # Convert to numpy array directly (faster than fromiter + chain)
+            data = np.array(pixels, dtype=np.float32).ravel()
             if color_mode == animfunctions.ColorMode.hsv:
                 np.fmod(data, 1.0, where=self._where_hue[0:(end - start) * 3], out=data)
-                data = data * 255.0
+                data *= 255.0
             else:
-                data = data * 255.0
-                data = np.clip(data, 0.0, 255.0)
+                data *= 255.0
+                np.clip(data, 0.0, 255.0, out=data)
             data = data.astype(np.uint8)
             packet = (b'\x00'
                       + (b'\x02' if color_mode == animfunctions.ColorMode.hsv else b'\x01')

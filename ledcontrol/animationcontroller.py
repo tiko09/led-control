@@ -404,7 +404,7 @@ class AnimationController:
 
                     else:
                         self._led_controller.set_range(
-                            [self._sacn_buffer[i] for i in range(range_start, range_end)],
+                            self._sacn_buffer[range_start:range_end],
                             range_start,
                             range_end,
                             self._correction,
