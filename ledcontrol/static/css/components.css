@@ -679,6 +679,239 @@ input[type="number"]:focus {
 }
 
 /* ============================================
+   ArtNet Configuration Styles
+   ============================================ */
+
+.artnet-config .card-body {
+  padding: 0;
+}
+
+.loading-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 3rem;
+  color: var(--text-muted);
+}
+
+.spinner {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.artnet-content {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Toggle Switch */
+.artnet-toggle {
+  padding: 1.5rem;
+  background: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.toggle-input {
+  display: none;
+}
+
+.toggle-slider {
+  position: relative;
+  width: 48px;
+  height: 26px;
+  background: var(--bg-secondary);
+  border: 2px solid var(--border-normal);
+  border-radius: 13px;
+  transition: all var(--transition-normal);
+  flex-shrink: 0;
+}
+
+.toggle-slider::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  background: var(--text-muted);
+  border-radius: 50%;
+  transition: all var(--transition-normal);
+}
+
+.toggle-input:checked + .toggle-slider {
+  background: var(--accent-gradient);
+  border-color: var(--accent-primary);
+}
+
+.toggle-input:checked + .toggle-slider::after {
+  transform: translateX(22px);
+  background: white;
+}
+
+.toggle-text {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.toggle-text svg {
+  color: var(--accent-primary);
+}
+
+/* Configuration Sections */
+.artnet-sections {
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  transition: opacity var(--transition-normal);
+}
+
+.artnet-sections.disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.config-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.section-subtitle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.section-subtitle svg {
+  color: var(--accent-primary);
+}
+
+.config-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1rem;
+}
+
+.input-hint {
+  display: block;
+  margin-top: 0.375rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.input-with-button {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+}
+
+.input-with-button .select-modern {
+  flex: 1;
+}
+
+/* Info Box */
+.info-box {
+  display: flex;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  background: linear-gradient(135deg, 
+    rgba(0, 163, 210, 0.08) 0%, 
+    rgba(0, 171, 154, 0.08) 100%);
+  border: 1px solid rgba(0, 163, 210, 0.2);
+  border-radius: 10px;
+  align-items: flex-start;
+}
+
+.info-box svg {
+  color: var(--accent-primary);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.info-content {
+  flex: 1;
+}
+
+.info-label {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: 0.375rem;
+}
+
+.info-value {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--accent-primary);
+}
+
+.info-detail {
+  font-size: 0.875rem;
+  font-weight: 400;
+  color: var(--text-muted);
+  margin-left: 0.5rem;
+}
+
+/* Action Buttons */
+.artnet-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1.5rem;
+  background: var(--bg-tertiary);
+  border-top: 1px solid var(--border-subtle);
+  flex-wrap: wrap;
+}
+
+.status-message {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1rem;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  margin-left: auto;
+}
+
+.status-message.ok {
+  background: rgba(0, 171, 154, 0.1);
+  color: #00ab9a;
+  border: 1px solid rgba(0, 171, 154, 0.3);
+}
+
+.status-message.error {
+  background: rgba(240, 108, 111, 0.1);
+  color: #f06c6f;
+  border: 1px solid rgba(240, 108, 111, 0.3);
+}
+
+/* ============================================
    Responsive Design
    ============================================ */
 
@@ -692,6 +925,10 @@ input[type="number"]:focus {
   
   .card-body {
     padding: 1rem;
+  }
+  
+  .artnet-config .card-body {
+    padding: 0;
   }
   
   .button-group {
@@ -710,6 +947,37 @@ input[type="number"]:focus {
   
   .preset-controls {
     gap: 0.875rem;
+  }
+  
+  .config-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .artnet-toggle {
+    padding: 1rem;
+  }
+  
+  .artnet-sections {
+    padding: 1rem;
+  }
+  
+  .artnet-actions {
+    padding: 1rem;
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .status-message {
+    margin-left: 0;
+    justify-content: center;
+  }
+  
+  .input-with-button {
+    flex-direction: column;
+  }
+  
+  .input-with-button .btn {
+    width: 100%;
   }
 }
 
