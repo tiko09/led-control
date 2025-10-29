@@ -21,6 +21,10 @@
   <link rel="stylesheet" href="static/css/index.css">
   <link rel="stylesheet" href="static/css/modern.css">
   <link rel="stylesheet" href="static/css/components.css">
+  <link rel="stylesheet" href="static/css/visualizer.css">
+  
+  <!-- Socket.IO for LED Visualizer -->
+  <script src="https://cdn.socket.io/4.5.4/socket.io.min.js" crossorigin="anonymous"></script>
 </head>
 <body class="body-dark" data-theme="dark">
   <!-- Theme Toggle Button -->
@@ -74,6 +78,15 @@
               <path d="M12 1v6m0 6v6m5.657-13.657L15 9M9 15l-2.657 2.657M1 12h6m6 0h6M9 9L6.343 6.343m11.314 11.314L15 15"/>
             </svg>
             <span>Control</span>
+          </router-link>
+          
+          <router-link to="/visualizer" class="nav-link" active-class="nav-link-active">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+              <line x1="8" y1="21" x2="16" y2="21"></line>
+              <line x1="12" y1="17" x2="12" y2="21"></line>
+            </svg>
+            <span>Visualizer</span>
           </router-link>
           
           <router-link to="/setup" class="nav-link" active-class="nav-link-active">

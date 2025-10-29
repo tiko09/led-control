@@ -1,0 +1,199 @@
+/* LED Visualizer Page Styles
+ * Real-time LED strip visualization with milky glass effect
+ */
+
+.visualizer-page {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+/* Controls Section */
+.visualizer-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.control-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+/* Stats Section */
+.visualizer-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 1rem;
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 1rem;
+  background: var(--bg-tertiary);
+  border-radius: 10px;
+  border: 1px solid var(--border-subtle);
+  transition: all var(--transition-fast);
+}
+
+.stat-item:hover {
+  border-color: var(--accent-primary);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 163, 210, 0.15);
+}
+
+.stat-label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.5rem;
+}
+
+.stat-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--accent-primary);
+  font-feature-settings: 'tnum';
+}
+
+/* Canvas Container */
+.visualizer-canvas-container {
+  position: relative;
+  overflow-x: auto;
+  overflow-y: hidden;
+  background: #0a0b0d;
+  min-height: 200px;
+}
+
+.visualizer-canvas-container .card-body {
+  padding: 0;
+}
+
+.canvas-wrapper {
+  position: relative;
+  min-width: 100%;
+  padding: 2rem;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* LED Canvas */
+.led-canvas {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  image-rendering: crisp-edges;
+  image-rendering: pixelated;
+  transition: filter var(--transition-normal);
+}
+
+/* Milky Glass Overlay Effect */
+.milky-glass-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    circle at center,
+    rgba(255, 255, 255, 0.02) 0%,
+    rgba(255, 255, 255, 0.08) 100%
+  );
+  backdrop-filter: blur(8px) saturate(1.2);
+  -webkit-backdrop-filter: blur(8px) saturate(1.2);
+  mix-blend-mode: overlay;
+  opacity: 0.6;
+  transition: opacity var(--transition-normal);
+}
+
+.canvas-wrapper.blur-enabled .led-canvas {
+  filter: blur(1px);
+}
+
+/* No Connection State */
+.no-connection {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.no-connection svg {
+  color: var(--text-muted);
+  opacity: 0.5;
+}
+
+.no-connection p {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+/* Badge Variants */
+.badge-success {
+  background: rgba(0, 171, 154, 0.1) !important;
+  color: #00ab9a !important;
+  border-color: rgba(0, 171, 154, 0.3) !important;
+}
+
+.badge-error {
+  background: rgba(240, 108, 111, 0.1) !important;
+  color: #f06c6f !important;
+  border-color: rgba(240, 108, 111, 0.3) !important;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .visualizer-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .canvas-wrapper {
+    padding: 1rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .visualizer-stats {
+    grid-template-columns: 1fr;
+  }
+  
+  .stat-value {
+    font-size: 1.25rem;
+  }
+}
+
+/* Scrollbar Styling for Canvas Container */
+.visualizer-canvas-container::-webkit-scrollbar {
+  height: 8px;
+}
+
+.visualizer-canvas-container::-webkit-scrollbar-track {
+  background: var(--bg-tertiary);
+  border-radius: 4px;
+}
+
+.visualizer-canvas-container::-webkit-scrollbar-thumb {
+  background: var(--accent-primary);
+  border-radius: 4px;
+}
+
+.visualizer-canvas-container::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-secondary);
+}

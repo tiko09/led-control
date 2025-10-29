@@ -106,6 +106,14 @@ class AnimationController:
             self._last_sacn_time = 0
             self._sacn_perf_avg = 0
             self._sacn_count = 0
+        
+        # LED Visualizer for browser display (optional)
+        self._visualizer = None
+
+    def set_visualizer(self, visualizer):
+        """Set the LED visualizer for real-time browser display"""
+        self._visualizer = visualizer
+        print('LED Visualizer connected to animation controller')
 
     # Computing cached values
 
@@ -400,6 +408,11 @@ class AnimationController:
                             settings['render_mode'],
                             settings['render_target']
                         )
+                        
+                        # Send to visualizer if enabled (only for main group to avoid duplicates)
+                        if self._visualizer and group == 'main':
+                            self._visualizer.update_pixels(state, range_end - range_start, 
+                                                          'hsv' if mode == animfunctions.ColorMode.hsv else 'rgb')
 
                     else:
                         self._led_controller.set_range(
@@ -413,6 +426,11 @@ class AnimationController:
                             settings['render_mode'],
                             settings['render_target']
                         )
+                        
+                        # Send sACN data to visualizer if enabled
+                        if self._visualizer and group == 'main':
+                            self._visualizer.update_pixels(self._sacn_buffer[range_start:range_end], 
+                                                          range_end - range_start, 'rgb')
 
                 except Exception as e:
                     msg = traceback.format_exception(type(e), e, e.__traceback__)

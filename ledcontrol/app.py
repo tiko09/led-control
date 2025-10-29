@@ -8,10 +8,12 @@ import traceback
 from threading import Timer
 from pathlib import Path
 from flask import Flask, render_template, request, jsonify
+from flask_socketio import SocketIO, emit
 from ledcontrol.animationcontroller import AnimationController
 from ledcontrol.ledcontroller import LEDController
 from ledcontrol.homekit import homekit_start
 from ledcontrol.artnet_server import ArtNetServer
+from ledcontrol.led_visualizer import LEDVisualizer
 
 import ledcontrol.pixelmappings as pixelmappings
 import ledcontrol.animationfunctions as animfunctions
@@ -36,6 +38,10 @@ def create_app(led_count,
                no_timer_reset,
                dev):
     app = Flask(__name__)
+    app.config['SECRET_KEY'] = 'led-control-secret-key-change-in-production'
+    
+    # Initialize SocketIO for LED visualizer
+    socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 
     # Create pixel mapping function
     if pixel_mapping_file is not None:
@@ -61,6 +67,10 @@ def create_app(led_count,
                                      enable_sacn,
                                      no_timer_reset,
                                      led_brightness_limit)
+    
+    # Initialize LED visualizer for real-time browser display
+    visualizer = LEDVisualizer(socketio, target_fps=30)
+    controller.set_visualizer(visualizer)
 
     presets = {}
     functions = dict(animfunctions.default)
@@ -481,5 +491,22 @@ def create_app(led_count,
         settings["log_level"] = level
         set_log_level(level)
         return {"status": "ok"}
+    
+    # WebSocket handlers for LED visualizer
+    @socketio.on('connect', namespace='/visualizer')
+    def visualizer_connect():
+        visualizer.on_connect()
+        emit('connected', {'led_count': led_count, 'fps': visualizer.target_fps})
+    
+    @socketio.on('disconnect', namespace='/visualizer')
+    def visualizer_disconnect():
+        visualizer.on_disconnect()
+    
+    @socketio.on('get_stats', namespace='/visualizer')
+    def visualizer_get_stats():
+        return visualizer.get_stats()
+    
+    # Store socketio instance in app for access from main
+    app.socketio = socketio
 
     return app

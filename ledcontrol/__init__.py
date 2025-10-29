@@ -56,7 +56,12 @@ def main():
                      args.dev)
 
     if args.dev:
-        app.run(host=args.host, port=args.port)
+        # Development mode: use Flask-SocketIO's built-in server
+        app.socketio.run(app, host=args.host, port=args.port, debug=True)
     else:
+        # Production mode: use bjoern (note: bjoern doesn't support WebSockets natively)
+        # For WebSocket support in production, consider using eventlet or gevent
+        print("Warning: Production mode with bjoern doesn't support WebSockets.")
+        print("LED Visualizer will not work. Use --dev flag or install eventlet/gevent.")
         import bjoern
         bjoern.run(app, host=args.host, port=args.port)
