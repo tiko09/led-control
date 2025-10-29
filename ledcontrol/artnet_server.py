@@ -10,7 +10,7 @@ import time
 
 # Try to import C extension for high-performance spatial smoothing
 try:
-    from ledcontrol import ledcontrol_artnet_utils as c_artnet
+    from ledcontrol import _ledcontrol_artnet_utils as c_artnet
     HAS_C_ARTNET = True
     print("Using C extension for ArtNet spatial smoothing (high performance)")
 except ImportError:
