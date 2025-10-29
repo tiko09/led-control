@@ -51,7 +51,6 @@ if sys.platform.startswith('linux'):
             sources=['ledcontrol/driver/ledcontrol_animation_utils.i'],
             include_dirs=['ledcontrol/driver'],
             extra_compile_args=['-O3', '-ffast-math', '-std=c99'],
-            swig_opts=['-python'],
         )
         artnet_utils_extension = Extension(
             '_ledcontrol_artnet_utils',
@@ -59,7 +58,6 @@ if sys.platform.startswith('linux'):
             include_dirs=['ledcontrol/artnet'],
             extra_compile_args=['-O3', '-std=c99'],
             extra_link_args=['-lm'],
-            swig_opts=['-python'],
         )
         print("SWIG found - C extensions will be built for maximum performance")
     else:
