@@ -33,7 +33,7 @@ export default {
             <!-- Enable Toggle -->
             <div class="artnet-toggle">
               <label class="toggle-label">
-                <input type="checkbox" class="toggle-input" v-model="form.enable_artnet">
+                <input type="checkbox" class="toggle-input" v-model="form.enable_artnet" @change="save">
                 <span class="toggle-slider"></span>
                 <span class="toggle-text">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -66,6 +66,7 @@ export default {
                       min="0" 
                       max="32767" 
                       v-model.number="form.artnet_universe"
+                      @input="save"
                       :disabled="!form.enable_artnet"
                     >
                     <span class="input-hint">ArtNet universe (0-32767)</span>
@@ -79,6 +80,7 @@ export default {
                       min="0" 
                       max="511" 
                       v-model.number="form.artnet_channel_offset"
+                      @input="save"
                       :disabled="!form.enable_artnet"
                     >
                     <span class="input-hint">Starting DMX channel (0-511)</span>
@@ -92,6 +94,7 @@ export default {
                       min="1" 
                       max="1024" 
                       v-model.number="form.artnet_group_size"
+                      @input="save"
                       :disabled="!form.enable_artnet"
                     >
                     <span class="input-hint">Pixel grouping size (1-1024)</span>
@@ -113,6 +116,7 @@ export default {
                     <select 
                       class="select-modern" 
                       v-model="form.artnet_frame_interpolation"
+                      @change="save"
                       :disabled="!form.enable_artnet"
                     >
                       <option value="none">None</option>
@@ -130,6 +134,7 @@ export default {
                       min="1" 
                       max="20" 
                       v-model.number="form.artnet_frame_interp_size"
+                      @input="save"
                       :disabled="!form.enable_artnet || form.artnet_frame_interpolation === 'none'"
                     >
                     <span class="input-hint">Number of frames to interpolate (1-20)</span>
@@ -156,6 +161,7 @@ export default {
                     <select 
                       class="select-modern" 
                       v-model="form.artnet_spatial_smoothing"
+                      @change="save"
                       :disabled="!form.enable_artnet"
                     >
                       <option value="none">None</option>
@@ -174,6 +180,7 @@ export default {
                       min="1" 
                       max="20" 
                       v-model.number="form.artnet_spatial_size"
+                      @input="save"
                       :disabled="!form.enable_artnet || form.artnet_spatial_smoothing === 'none'"
                     >
                     <span class="input-hint">Smoothing kernel size (1-20)</span>
@@ -238,19 +245,6 @@ export default {
             <!-- Action Buttons -->
             <div class="artnet-actions">
               <button 
-                class="btn btn-primary" 
-                @click="save" 
-                :disabled="saving || !form.enable_artnet"
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
-                  <polyline points="17 21 17 13 7 13 7 21"></polyline>
-                  <polyline points="7 3 7 8 15 8"></polyline>
-                </svg>
-                {{ saving ? 'Saving...' : 'Save Configuration' }}
-              </button>
-              
-              <button 
                 class="btn btn-secondary" 
                 @click="load" 
                 :disabled="saving"
@@ -285,6 +279,7 @@ export default {
         saving: false,
         message: '',
         messageType: 'ok',
+        saveTimeout: null,
         form: {
           enable_artnet: false,
           artnet_universe: 0,
@@ -324,23 +319,31 @@ export default {
         }
       },
       async save() {
-        this.saving = true;
-        this.message = '';
-        try {
-          const r = await fetch('/api/artnet', {
-            method: 'POST',
-              headers: {'Content-Type':'application/json'},
-              body: JSON.stringify(this.form)
-          });
-          if (!r.ok) throw new Error('HTTP '+r.status);
-          this.message = 'Gespeichert';
-          this.messageType = 'ok';
-        } catch (e) {
-          this.message = 'Speichern fehlgeschlagen';
-          this.messageType = 'error';
-        } finally {
-          this.saving = false;
+        // Debounce: Clear existing timeout
+        if (this.saveTimeout) {
+          clearTimeout(this.saveTimeout);
         }
+        
+        // Set new timeout for delayed save
+        this.saveTimeout = setTimeout(async () => {
+          this.saving = true;
+          this.message = '';
+          try {
+            const r = await fetch('/api/artnet', {
+              method: 'POST',
+                headers: {'Content-Type':'application/json'},
+                body: JSON.stringify(this.form)
+            });
+            if (!r.ok) throw new Error('HTTP '+r.status);
+            this.message = 'Gespeichert';
+            this.messageType = 'ok';
+          } catch (e) {
+            this.message = 'Speichern fehlgeschlagen';
+            this.messageType = 'error';
+          } finally {
+            this.saving = false;
+          }
+        }, 500); // 500ms debounce
       },
       async saveLogLevel() {
         this.saving = true;
