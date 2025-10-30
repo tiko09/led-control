@@ -1055,25 +1055,47 @@ def create_app(led_count,
             app.logger.error(f"Failed to update {target_url}: {e}")
             return {"success": False, "error": str(e)}, 500
     
-    @app.post("/api/pi/restart")
-    def api_restart_self():
-        """Restart this Pi's ledcontrol service"""
+    @app.post("/api/pi/restart-service")
+    def api_restart_service():
+        """Restart this Pi's ledcontrol service only"""
         try:
-            app.logger.info("Restart requested")
+            app.logger.info("Service restart requested")
             
             def restart_server():
                 time.sleep(1)
-                app.logger.info("Restarting now...")
+                app.logger.info("Restarting service now...")
                 os.execv(sys.executable, [sys.executable] + sys.argv)
             
             threading.Thread(target=restart_server, daemon=True).start()
             
             return {
                 "success": True,
-                "message": "Restarting in 1 second..."
+                "message": "Restarting service in 1 second..."
             }
         except Exception as e:
-            app.logger.error(f"Restart failed: {e}")
+            app.logger.error(f"Service restart failed: {e}")
+            return {"success": False, "error": str(e)}, 500
+    
+    @app.post("/api/pi/restart")
+    def api_restart_self():
+        """Restart the entire Raspberry Pi (reboot)"""
+        try:
+            app.logger.info("System reboot requested")
+            
+            def reboot_system():
+                time.sleep(2)
+                app.logger.info("Rebooting system now...")
+                # Use sudo reboot command
+                subprocess.run(['sudo', 'reboot'], check=False)
+            
+            threading.Thread(target=reboot_system, daemon=True).start()
+            
+            return {
+                "success": True,
+                "message": "Rebooting system in 2 seconds..."
+            }
+        except Exception as e:
+            app.logger.error(f"System reboot failed: {e}")
             return {"success": False, "error": str(e)}, 500
     
     @app.post("/api/pi/check-updates-remote")

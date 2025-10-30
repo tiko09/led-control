@@ -114,8 +114,31 @@ export default {
       }
       this.updatingThis = false;
     },
-    async restartThis() {
-      if (!confirm(`Restart this Pi?`)) {
+    async restartServiceThis() {
+      if (!confirm(`Restart LED Control service on this Pi?\n\n(The Pi will stay online, only the LED service restarts)`)) {
+        return;
+      }
+      
+      this.updatingThis = true;
+      try {
+        const response = await fetch('/api/pi/restart-service', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        
+        if (response.ok) {
+          alert(`LED Control service is restarting...`);
+        } else {
+          const error = await response.json();
+          alert(`Failed to restart service: ${error.message}`);
+        }
+      } catch (e) {
+        alert(`Failed to restart service: ${e.message}`);
+      }
+      this.updatingThis = false;
+    },
+    async rebootThis() {
+      if (!confirm(`Reboot this Raspberry Pi?\n\n⚠️ This will restart the entire system!`)) {
         return;
       }
       
@@ -127,13 +150,13 @@ export default {
         });
         
         if (response.ok) {
-          alert(`This Pi is restarting...`);
+          alert(`Raspberry Pi is rebooting...\n\nThe system will be offline for about 30-60 seconds.`);
         } else {
           const error = await response.json();
-          alert(`Failed to restart: ${error.message}`);
+          alert(`Failed to reboot: ${error.message}`);
         }
       } catch (e) {
-        alert(`Failed to restart: ${e.message}`);
+        alert(`Failed to reboot: ${e.message}`);
       }
       this.updatingThis = false;
     },
@@ -308,8 +331,8 @@ export default {
       msg += results.join('\n');
       alert(msg);
     },
-    async restartPi(device) {
-      if (!confirm(`Restart ${device.device_name || device.hostname}?`)) {
+    async rebootPi(device) {
+      if (!confirm(`Reboot ${device.device_name || device.hostname}?\n\n⚠️ This will restart the entire Raspberry Pi!`)) {
         return;
       }
       
@@ -322,13 +345,13 @@ export default {
         });
         
         if (response.ok) {
-          alert(`${device.device_name} is restarting...`);
+          alert(`${device.device_name} is rebooting...\n\nThe Pi will be offline for about 30-60 seconds.`);
         } else {
           const error = await response.json();
-          alert(`Failed to restart: ${error.message}`);
+          alert(`Failed to reboot: ${error.message}`);
         }
       } catch (e) {
-        alert(`Failed to restart: ${e.message}`);
+        alert(`Failed to reboot: ${e.message}`);
       }
       this.$set(this.updating, device.hostname, false);
     },
@@ -471,11 +494,11 @@ export default {
           Update & Restart
         </button>
         <button 
-          @click="restartThis()" 
+          @click="rebootThis()" 
           :disabled="updatingThis"
           class="btn btn-danger"
         >
-          Restart This Pi
+          Reboot This Pi
         </button>
       </div>
       <div v-if="thisUpdateChanges.length > 0" class="update-changes">
@@ -603,11 +626,11 @@ export default {
             Update & Restart
           </button>
           <button 
-            @click="restartPi(device)" 
+            @click="rebootPi(device)" 
             :disabled="updating[device.hostname]"
             class="btn btn-danger"
           >
-            Restart
+            Reboot
           </button>
         </div>
       </div>
