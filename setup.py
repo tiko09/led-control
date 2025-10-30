@@ -140,7 +140,11 @@ if sys.platform.startswith('linux'):
                     'ledcontrol/driver',
                     'ledcontrol/driver/rpi_ws281x',
                 ],
-                extra_compile_args=['-O3', '-std=c99'],
+                extra_compile_args=[
+                    '-O3', 
+                    '-std=gnu99',  # Use gnu99 instead of c99 for Linux extensions
+                    '-D_GNU_SOURCE',  # Enable GNU extensions (getpagesize, etc.)
+                ],
                 extra_link_args=['-lm'],
                 swig_opts=['-I/usr/include'],  # Help SWIG find system headers
             )
