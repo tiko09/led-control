@@ -1,6 +1,17 @@
 # led-control WS2812B LED Controller Server
 # Copyright 2022 jackw01. Released under the MIT License (see LICENSE for details).
 
+# Check if we should use eventlet and monkey patch BEFORE any other imports
+import sys
+_use_eventlet = '--dev' not in sys.argv
+
+if _use_eventlet:
+    try:
+        import eventlet
+        eventlet.monkey_patch()
+    except ImportError:
+        pass  # Will handle this later in main()
+
 import argparse
 from ledcontrol.app import create_app
 
@@ -60,10 +71,10 @@ def main():
     else:
         # Production mode: Try to use eventlet or gevent for WebSocket support
         # Fall back to bjoern if neither is available (but WebSockets won't work)
+        # Note: eventlet.monkey_patch() was already called at module import time
         try:
             # Try eventlet first (recommended for Flask-SocketIO)
             import eventlet
-            eventlet.monkey_patch()
             print(f"Starting server with eventlet (WebSocket support enabled)")
             app.socketio.run(app, host=args.host, port=args.port)
         except ImportError:
