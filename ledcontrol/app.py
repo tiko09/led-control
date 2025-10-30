@@ -222,6 +222,13 @@ def create_app(led_count,
             # Convert RGBW to RGB by adding white channel to each color
             channels_per_led = leds.getNrOfChannelsPerLed()
             
+            # Debug: Print first time
+            if not hasattr(set_led, '_debug_printed'):
+                app.logger.info(f'ArtNet Visualizer: channels_per_led={channels_per_led}, data_len={len(data)}, led_count={led_count}')
+                if len(data) >= 8:
+                    app.logger.info(f'First 2 LEDs: [{data[0]},{data[1]},{data[2]},{data[3]}] [{data[4]},{data[5]},{data[6]},{data[7]}]')
+                set_led._debug_printed = True
+            
             if channels_per_led == 4:
                 # RGBW: Add W to R, G, B to show true brightness
                 rgb_data = []
