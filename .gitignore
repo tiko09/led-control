@@ -114,6 +114,10 @@ accessory.state
 
 cmake-*
 config.json
+config.json.error
+*.json.error
+*.json.bak
+ledcontrol-dev.json
 firmware/wifi_config.h
 
 # SWIG generated files

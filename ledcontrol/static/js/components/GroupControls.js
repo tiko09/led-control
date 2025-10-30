@@ -63,7 +63,6 @@ export default {
       this.animFunction.source = source;
       await this.updateFunctionSource();
       const result = await store.requestCompile(parseInt(this.functionKey, 10));
-      console.log('Compile errors/warnings:', result.errors, result.warnings);
       if (result.errors.length === 0) {
         this.sourceStatusClass = 'status-success';
         this.sourceStatus = 'Pattern compiled successfully';

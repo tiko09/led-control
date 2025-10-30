@@ -48,10 +48,10 @@ def create_app(led_count,
         pixel_mapping = json.load(pixel_mapping_file)
         pixel_mapping_file.close()
         led_count = len(pixel_mapping)
-        print(f'Using pixel mapping from file ({led_count} LEDs)')
+        app.logger.info(f'Using pixel mapping from file ({led_count} LEDs)')
         mapping_func = pixelmappings.from_array(pixel_mapping)
     else:
-        print(f'Using default linear pixel mapping ({led_count} LEDs)')
+        app.logger.info(f'Using default linear pixel mapping ({led_count} LEDs)')
         mapping_func = pixelmappings.line(led_count)
 
     leds = LEDController(led_count,
@@ -82,7 +82,7 @@ def create_app(led_count,
         if dev:
             # In dev mode, use local config file in current directory
             filename = Path.cwd() / 'ledcontrol-dev.json'
-            print(f'Dev mode: Using config file at {filename}')
+            app.logger.info(f'Dev mode: Using config file at {filename}')
         else:
             # In production mode, use /etc
             filename = Path('/etc') / 'ledcontrol.json'
@@ -99,7 +99,7 @@ def create_app(led_count,
             settings = json.loads(settings_str)
 
             if 'save_version' not in settings:
-                print(f'Detected an old save file version at {filename}. Making a backup to {filename}.bak.')
+                app.logger.warning(f'Detected an old save file version at {filename}. Making a backup to {filename}.bak.')
                 shutil.copyfile(filename, filename.with_suffix('.json.bak'))
 
                 # Rename 'params' and recreate as 'settings'
@@ -144,7 +144,7 @@ def create_app(led_count,
                 for k in settings['palettes']:
                     settings['palettes'][k]['default'] = False
 
-                print('Successfully upgraded save file.')
+                app.logger.info('Successfully upgraded save file.')
 
             # Enforce calibration off when starting up
             settings['settings']['calibration'] = 0
@@ -169,13 +169,13 @@ def create_app(led_count,
                 controller.set_palette(int(k), v)
             controller.calculate_palette_tables()
 
-            print(f'Loaded saved settings from {filename}')
+            app.logger.info(f'Loaded saved settings from {filename}')
 
         except Exception as e:
             if settings_str == '':
-                print(f'Creating new settings file at {filename}.')
+                app.logger.info(f'Creating new settings file at {filename}.')
             else:
-                print(f'Some saved settings at {filename} are out of date or invalid. Making a backup of the old file to {filename}.error and creating a new one with default settings.')
+                app.logger.warning(f'Some saved settings at {filename} are out of date or invalid. Making a backup of the old file to {filename}.error and creating a new one with default settings.')
                 shutil.copyfile(filename, filename.with_suffix('.json.error'))
             
             # Initialize settings as empty dict when loading fails
@@ -250,13 +250,6 @@ def create_app(led_count,
         controller.end_animation()
         controller.clear_leds()
         app.logger.debug("Animation gestoppt (ArtNet aktiv)")
-
-    @app.before_request
-    def before_request():
-        'Log post request json for testing'
-        if dev and request.method == 'POST':
-            print(request.endpoint)
-            print(request.json)
 
     @app.route('/')
     def index():
@@ -378,13 +371,12 @@ def create_app(led_count,
         try:
             with filename.open('w') as data_file:
                 json.dump(data, data_file, sort_keys=True, indent=4)
-                print(f'Saved settings to {filename}')
+                app.logger.info(f'Saved settings to {filename}')
         except PermissionError:
-            print(f'ERROR: No permission to write to {filename}')
-            print('Hint: Use --config_file to specify a writable location, or run in dev mode (--dev)')
+            app.logger.error(f'No permission to write to {filename}')
+            app.logger.error('Hint: Use --config_file to specify a writable location, or run in dev mode (--dev)')
         except Exception as e:
-            traceback.print_exc()
-            print(f'Could not save settings to {filename}: {e}')
+            app.logger.error(f'Could not save settings to {filename}: {e}', exc_info=True)
 
     def auto_save_settings():
         'Timer for automatically saving settings'

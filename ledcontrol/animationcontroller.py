@@ -5,9 +5,12 @@ import math
 import random
 import time
 import traceback
+import logging
 import RestrictedPython
 import sacn
 import collections
+
+logger = logging.getLogger(__name__)
 import numpy as np
 from itertools import zip_longest
 from ledcontrol.intervaltimer import IntervalTimer
@@ -114,7 +117,7 @@ class AnimationController:
     def set_visualizer(self, visualizer):
         """Set the LED visualizer for real-time browser display"""
         self._visualizer = visualizer
-        print('LED Visualizer connected to animation controller')
+        logger.info('LED Visualizer connected to animation controller')
 
     def is_animation_running(self):
         """Check if animation thread is currently running"""
@@ -346,7 +349,7 @@ class AnimationController:
         delta_t = self._time - last_t
 
         if self._timer.get_count() % 100 == 0:
-            print(f'Execution time: {self._timer.get_perf_avg():0.5f}s, {self._timer.get_rate():05.1f} FPS')
+            logger.debug(f'Execution time: {self._timer.get_perf_avg():0.5f}s, {self._timer.get_rate():05.1f} FPS')
 
         if self._settings['calibration'] == 1:
             for group, settings in list(self._settings['groups'].items()):
@@ -433,8 +436,7 @@ class AnimationController:
                         )
 
                 except Exception as e:
-                    msg = traceback.format_exception(type(e), e, e.__traceback__)
-                    print(f'Error during animation execution: {msg}')
+                    logger.error(f'Error during animation execution', exc_info=True)
                     r = 0.1 * driver.wave_pulse(time_fix, 0.5)
                     self._led_controller.set_range(
                         [(r, 0, 0) for i in range(range_end - range_start)],
@@ -498,7 +500,7 @@ class AnimationController:
 
         self._sacn_count += 1
         if self._sacn_count % 100 == 0:
-            print('Average sACN rate (packets/s): {}'.format(1 / (self._sacn_perf_avg / 100)))
+            logger.debug('Average sACN rate (packets/s): {}'.format(1 / (self._sacn_perf_avg / 100)))
             self._sacn_perf_avg = 0
 
         data = [x / 255.0 for x in packet.dmxData[:self._led_count * 3]]

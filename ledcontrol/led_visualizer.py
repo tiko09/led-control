@@ -3,8 +3,11 @@
 
 import time
 import threading
+import logging
 import numpy as np
 from flask_socketio import SocketIO, emit
+
+logger = logging.getLogger(__name__)
 
 class LEDVisualizer:
     """
@@ -32,14 +35,14 @@ class LEDVisualizer:
         with self.lock:
             self.connected_clients += 1
             self.enabled = self.connected_clients > 0
-        print(f'LED Visualizer: Client connected (total: {self.connected_clients})')
+        logger.info(f'Client connected (total: {self.connected_clients})')
         
     def on_disconnect(self):
         """Called when a client disconnects"""
         with self.lock:
             self.connected_clients = max(0, self.connected_clients - 1)
             self.enabled = self.connected_clients > 0
-        print(f'LED Visualizer: Client disconnected (remaining: {self.connected_clients})')
+        logger.info(f'Client disconnected (remaining: {self.connected_clients})')
         
     def update_pixels(self, pixels, led_count, mode='rgb'):
         """
@@ -86,12 +89,12 @@ class LEDVisualizer:
             
             if self.frames_sent % 100 == 0:
                 avg_fps = 1.0 / self.frame_interval if self.frame_interval > 0 else 0
-                print(f'LED Visualizer: {self.frames_sent} frames sent, '
-                      f'{self.bytes_sent / 1024:.1f} KB, '
-                      f'~{avg_fps:.1f} FPS')
+                logger.debug(f'{self.frames_sent} frames sent, '
+                            f'{self.bytes_sent / 1024:.1f} KB, '
+                            f'~{avg_fps:.1f} FPS')
                       
         except Exception as e:
-            print(f'LED Visualizer: Error sending frame: {e}')
+            logger.error(f'Error sending frame: {e}', exc_info=True)
     
     def _hsv_to_rgb_batch(self, hsv_pixels):
         """Convert HSV colors to RGB (vectorized for performance)"""

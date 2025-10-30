@@ -35,19 +35,16 @@ export default {
       });
 
       this.socket.on('connect', () => {
-        console.log('Connected to LED visualizer');
         this.connected = true;
       });
 
       this.socket.on('disconnect', () => {
-        console.log('Disconnected from LED visualizer');
         this.connected = false;
       });
 
       this.socket.on('connected', (data) => {
         this.ledCount = data.led_count;
         this.targetFps = data.fps;
-        console.log(`LED Visualizer: ${this.ledCount} LEDs @ ${this.targetFps} FPS`);
         this.$nextTick(() => {
           this.initCanvas();
         });
