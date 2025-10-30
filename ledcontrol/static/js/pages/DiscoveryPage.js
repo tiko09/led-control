@@ -19,6 +19,10 @@ export default {
       thisCommitsBehind: 0,
       thisUpdateChanges: [],
       socket: null,
+      // System stats
+      thisStats: { cpu_percent: 0, ram_percent: 0, ram_used_mb: 0, ram_total_mb: 0 },
+      deviceStats: {}, // { hostname: { cpu_percent, ram_percent, ... } }
+      statsInterval: null,
     }
   },
   computed: {
@@ -170,6 +174,11 @@ export default {
       } catch (e) {
         console.error('Failed to save Pi settings:', e);
       }
+    },
+    getStatsClass(percent) {
+      if (percent >= 90) return 'stats-critical';
+      if (percent >= 75) return 'stats-warning';
+      return 'stats-good';
     },
     async loadDevices() {
       try {
@@ -408,16 +417,65 @@ export default {
       this.socket.on('disconnect', () => {
         console.log('Discovery WebSocket disconnected');
       });
+    },
+    async fetchThisStats() {
+      try {
+        const response = await fetch('/api/pi/stats');
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success) {
+            this.thisStats = data;
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching this Pi stats:', error);
+      }
+    },
+    async fetchRemoteStats(device) {
+      try {
+        const response = await fetch('/api/pi/stats-remote', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: device.url })
+        });
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success) {
+            this.$set(this.deviceStats, device.hostname, data);
+          }
+        }
+      } catch (error) {
+        console.error(`Error fetching stats for ${device.hostname}:`, error);
+      }
+    },
+    async fetchAllStats() {
+      // Fetch stats for this Pi
+      await this.fetchThisStats();
+      
+      // Fetch stats for all online remote Pis
+      const fetchPromises = this.onlineDevices.map(device => 
+        this.fetchRemoteStats(device)
+      );
+      await Promise.all(fetchPromises);
     }
   },
   async mounted() {
     await this.loadPiSettings();
     await this.loadDevices();
     this.connectWebSocket();
+    
+    // Start stats polling
+    this.fetchAllStats();
+    this.statsInterval = setInterval(() => {
+      this.fetchAllStats();
+    }, 10000); // Update every 10 seconds
   },
   beforeUnmount() {
     if (this.socket) {
       this.socket.disconnect();
+    }
+    if (this.statsInterval) {
+      clearInterval(this.statsInterval);
     }
   },
   template: `
@@ -455,6 +513,28 @@ export default {
         Master Mode (auto-sync to other Pis)
       </label>
       <p class="help-text">When enabled, changes will automatically sync to all Pis in the same group</p>
+    </div>
+    
+    <!-- System Stats Section -->
+    <div class="system-stats-section">
+      <h3>System Status</h3>
+      <div class="stats-grid">
+        <div class="stat-item">
+          <div class="stat-label">CPU</div>
+          <div class="stat-value" :class="getStatsClass(thisStats.cpu_percent)">
+            {{ thisStats.cpu_percent }}%
+          </div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">RAM</div>
+          <div class="stat-value" :class="getStatsClass(thisStats.ram_percent)">
+            {{ thisStats.ram_percent }}%
+          </div>
+          <div class="stat-detail">
+            {{ thisStats.ram_used_mb }} / {{ thisStats.ram_total_mb }} MB
+          </div>
+        </div>
+      </div>
     </div>
     
     <!-- Update This Pi Section -->
@@ -597,6 +677,26 @@ export default {
             <span class="value" :class="{ 'version-outdated': needsUpdate(device) }">
               {{ device.version }}
             </span>
+          </div>
+        </div>
+        
+        <div v-if="deviceStats[device.hostname]" class="pi-stats">
+          <div class="stats-grid">
+            <div class="stat-item">
+              <div class="stat-label">CPU</div>
+              <div class="stat-value" :class="getStatsClass(deviceStats[device.hostname].cpu_percent)">
+                {{ deviceStats[device.hostname].cpu_percent }}%
+              </div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-label">RAM</div>
+              <div class="stat-value" :class="getStatsClass(deviceStats[device.hostname].ram_percent)">
+                {{ deviceStats[device.hostname].ram_percent }}%
+              </div>
+              <div class="stat-detail">
+                {{ deviceStats[device.hostname].ram_used_mb }} / {{ deviceStats[device.hostname].ram_total_mb }} MB
+              </div>
+            </div>
           </div>
         </div>
         

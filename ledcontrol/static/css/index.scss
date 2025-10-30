@@ -871,3 +871,65 @@ option {
     }
   }
 }
+
+.system-stats-section {
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid $gray-100;
+  
+  h3 {
+    margin: 0 0 0.75rem 0;
+    font-size: 1rem;
+  }
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 1rem;
+}
+
+.stat-item {
+  text-align: center;
+  padding: 0.75rem;
+  background: rgba($gray-800, 0.3);
+  border-radius: $border-radius;
+  
+  .stat-label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    color: $gray-400;
+    margin-bottom: 0.25rem;
+    letter-spacing: 0.05em;
+  }
+  
+  .stat-value {
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+    
+    &.stats-good {
+      color: $color-success;
+    }
+    
+    &.stats-warning {
+      color: $color-warning;
+    }
+    
+    &.stats-critical {
+      color: $color-danger;
+    }
+  }
+  
+  .stat-detail {
+    font-size: 0.7rem;
+    color: $gray-400;
+  }
+}
+
+.pi-stats {
+  margin: 1rem 0;
+  padding: 0.75rem;
+  background: rgba($gray-900, 0.3);
+  border-radius: $border-radius;
+}

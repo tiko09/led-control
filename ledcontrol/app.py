@@ -1137,6 +1137,52 @@ def create_app(led_count,
         except Exception as e:
             return {"success": False, "error": str(e)}, 500
     
+    @app.get("/api/pi/stats")
+    def api_get_stats():
+        """Get current CPU and RAM usage statistics"""
+        try:
+            import psutil
+            
+            # Get CPU usage (1 second average)
+            cpu_percent = psutil.cpu_percent(interval=1)
+            
+            # Get memory info
+            memory = psutil.virtual_memory()
+            ram_percent = memory.percent
+            ram_used_mb = memory.used / (1024 * 1024)
+            ram_total_mb = memory.total / (1024 * 1024)
+            
+            return {
+                "success": True,
+                "cpu_percent": round(cpu_percent, 1),
+                "ram_percent": round(ram_percent, 1),
+                "ram_used_mb": round(ram_used_mb, 1),
+                "ram_total_mb": round(ram_total_mb, 1)
+            }
+        except Exception as e:
+            return {"success": False, "error": str(e)}, 500
+    
+    @app.post("/api/pi/stats-remote")
+    def api_get_stats_remote():
+        """Get stats from another Pi"""
+        data = request.get_json(force=True)
+        target_url = data.get('url')
+        
+        if not target_url:
+            return {"success": False, "error": "No target URL provided"}, 400
+        
+        try:
+            response = requests.get(
+                f"{target_url}/api/pi/stats",
+                timeout=5
+            )
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.Timeout:
+            return {"success": False, "error": "Request timed out"}, 504
+        except requests.exceptions.RequestException as e:
+            return {"success": False, "error": str(e)}, 500
+    
     # WebSocket handlers for LED visualizer
     @socketio.on('connect', namespace='/visualizer')
     def visualizer_connect():

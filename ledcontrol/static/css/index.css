@@ -831,4 +831,59 @@ option:hover, option:active {
   margin-bottom: 0.2rem;
 }
 
+.system-stats-section {
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid #e6e8ec;
+}
+.system-stats-section h3 {
+  margin: 0 0 0.75rem 0;
+  font-size: 1rem;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 1rem;
+}
+
+.stat-item {
+  text-align: center;
+  padding: 0.75rem;
+  background: rgba(52, 54, 57, 0.3);
+  border-radius: 3px;
+}
+.stat-item .stat-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  color: #95979a;
+  margin-bottom: 0.25rem;
+  letter-spacing: 0.05em;
+}
+.stat-item .stat-value {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+.stat-item .stat-value.stats-good {
+  color: #00ab9a;
+}
+.stat-item .stat-value.stats-warning {
+  color: #d08447;
+}
+.stat-item .stat-value.stats-critical {
+  color: #f06c6f;
+}
+.stat-item .stat-detail {
+  font-size: 0.7rem;
+  color: #95979a;
+}
+
+.pi-stats {
+  margin: 1rem 0;
+  padding: 0.75rem;
+  background: rgba(31, 33, 36, 0.3);
+  border-radius: 3px;
+}
+
 /*# sourceMappingURL=index.css.map */

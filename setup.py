@@ -69,6 +69,7 @@ requirements = [
     'zeroconf>=0.132.0',
     'requests>=2.28.0',
     'eventlet>=0.33.0',
+    'psutil>=5.9.0',
 ]
 
 # Add Linux-specific dependencies
