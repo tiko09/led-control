@@ -653,6 +653,109 @@ elif pi_version == 3:
                 
                 def cleanup(self):
                     pass  # rpi_ws281x handles cleanup automatically
+            
+            # Add Python implementations of render functions for compatibility
+            # (same as Pi 5 implementations)
+            def clamp(val, min_val, max_val):
+                return max(min_val, min(max_val, val))
+            
+            def scale_8(val, scale):
+                return int((val * scale) >> 8)
+            
+            def pack_rgbw(r, g, b, w):
+                return ((w & 0xFF) << 24) | ((r & 0xFF) << 16) | ((g & 0xFF) << 8) | (b & 0xFF)
+            
+            def unpack_rgb(color):
+                return [(color >> 16) & 0xFF, (color >> 8) & 0xFF, color & 0xFF]
+            
+            def render_hsv2rgb_rainbow_float(hsv, corr_rgb, saturation, brightness, has_white):
+                """Convert HSV float to packed RGBW using rainbow spectrum"""
+                import colorsys
+                h, s, v = hsv
+                r, g, b = colorsys.hsv_to_rgb(h, s * saturation, v * brightness)
+                r8 = scale_8(int(r * 255), corr_rgb[0])
+                g8 = scale_8(int(g * 255), corr_rgb[1])
+                b8 = scale_8(int(b * 255), corr_rgb[2])
+                if has_white:
+                    return pack_rgbw(r8, g8, b8, 0)
+                else:
+                    return ((r8 & 0xFF) << 16) | ((g8 & 0xFF) << 8) | (b8 & 0xFF)
+            
+            def render_rgb_float(rgb, corr_rgb, saturation, brightness, has_white):
+                """Convert RGB float to packed RGBW"""
+                r = clamp(rgb[0], 0.0, 1.0)
+                g = clamp(rgb[1], 0.0, 1.0)
+                b = clamp(rgb[2], 0.0, 1.0)
+                w = 0.0
+                sat = int(saturation * 255)
+                
+                if has_white:
+                    max_val = max(r, g, b)
+                    if sat == 0:
+                        r, g, b = 0, 0, 0
+                        min_val = max_val
+                    else:
+                        r = (r - max_val) * saturation + max_val
+                        g = (g - max_val) * saturation + max_val
+                        b = (b - max_val) * saturation + max_val
+                        min_val = min(r, g, b)
+                        r -= min_val
+                        g -= min_val
+                        b -= min_val
+                    w = min_val * min_val
+                else:
+                    if sat != 255:
+                        avg = (r + g + b) / 3.0
+                        if sat == 0:
+                            r = g = b = avg
+                        else:
+                            r = (r - avg) * saturation + avg
+                            g = (g - avg) * saturation + avg
+                            b = (b - avg) * saturation + avg
+                
+                r8 = int(r * brightness * 255)
+                g8 = int(g * brightness * 255)
+                b8 = int(b * brightness * 255)
+                w8 = int(w * brightness * 255)
+                
+                r8 = scale_8(r8, corr_rgb[0])
+                g8 = scale_8(g8, corr_rgb[1])
+                b8 = scale_8(b8, corr_rgb[2])
+                
+                return pack_rgbw(r8, g8, b8, w8)
+            
+            def ws2811_hsv_render_range_float(channel, values, start, end, correction, saturation, brightness, gamma, has_white):
+                """Render HSV values to a range of LEDs"""
+                if channel is None:
+                    return
+                corr_rgb = unpack_rgb(correction)
+                for i in range(start, end):
+                    color = render_hsv2rgb_rainbow_float(values[i - start], corr_rgb, saturation, brightness, has_white)
+                    channel.setPixelColor(i, color)
+            
+            def ws2811_rgb_render_range_float(channel, values, start, end, correction, saturation, brightness, gamma, has_white):
+                """Render RGB values to a range of LEDs"""
+                if channel is None:
+                    return
+                corr_rgb = unpack_rgb(correction)
+                for i in range(start, end):
+                    color = render_rgb_float(values[i - start], corr_rgb, saturation, brightness, has_white)
+                    channel.setPixelColor(i, color)
+            
+            def ws2811_rgb_render_calibration(strip, channel, count, correction, brightness):
+                """Render calibration color to all LEDs"""
+                if channel is None:
+                    return -1
+                corr_rgb = unpack_rgb(correction)
+                r8 = int(corr_rgb[0] * brightness)
+                g8 = int(corr_rgb[1] * brightness)
+                b8 = int(corr_rgb[2] * brightness)
+                color = pack_rgbw(r8, g8, b8, 0)
+                for i in range(count):
+                    channel.setPixelColor(i, color)
+                if strip is not None:
+                    strip.show()
+                return 1
         
         except ImportError as e2:
             print(f"Error: Could not import rpi_ws281x on Raspberry Pi 3/4: {e2}")

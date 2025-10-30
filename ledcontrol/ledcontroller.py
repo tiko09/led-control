@@ -45,8 +45,9 @@ class LEDController:
             self._has_white = 1 if 'W' in led_pixel_order else 0
             self._count = led_count
 
-            # Create WS2811Wrapper instance directly with rpi5-ws2812
+            # Create WS2811Wrapper instance directly
             if hasattr(driver, 'WS2811Wrapper'):
+                self._use_wrapper = True
                 self._leds = driver.WS2811Wrapper(
                     led_count,
                     led_pin,
@@ -58,8 +59,17 @@ class LEDController:
                     px_order
                 )
                 self._channel = self._leds
+                
+                # Substitute for __del__, traps an exit condition and cleans up properly
+                atexit.register(self._cleanup)
+                
+                # Begin - WS2811Wrapper has its own begin() method
+                resp = self._leds.begin()
+                if resp != 0:
+                    raise RuntimeError('WS2811Wrapper.begin() failed with code {0}'.format(resp))
             else:
                 # Fallback to old method if WS2811Wrapper not available
+                self._use_wrapper = False
                 self._leds = driver.new_ws2811_t()
                 
                 # Initialize the channels to zero
@@ -82,15 +92,15 @@ class LEDController:
                 # Initialize the controller
                 driver.ws2811_t_freq_set(self._leds, led_data_rate)
                 driver.ws2811_t_dmanum_set(self._leds, led_dma_channel)
+                
+                # Substitute for __del__, traps an exit condition and cleans up properly
+                atexit.register(self._cleanup)
 
-            # Substitute for __del__, traps an exit condition and cleans up properly
-            atexit.register(self._cleanup)
-
-            # Begin
-            resp = driver.ws2811_init(self._leds)
-            if resp != 0:
-                str_resp = driver.ws2811_get_return_t_str(resp)
-                raise RuntimeError('ws2811_init failed with code {0} ({1})'.format(resp, str_resp))
+                # Begin - old C API
+                resp = driver.ws2811_init(self._leds)
+                if resp != 0:
+                    str_resp = driver.ws2811_get_return_t_str(resp)
+                    raise RuntimeError('ws2811_init failed with code {0} ({1})'.format(resp, str_resp))
 
         # Used for scaling values sent for remote rendering
         self._where_hue = np.zeros((led_count * 3,), dtype=bool)
@@ -107,7 +117,12 @@ class LEDController:
     def _cleanup(self):
         # Clean up memory used by the library when not needed anymore
         if driver.is_raspberrypi() and self._leds is not None:
-            driver.delete_ws2811_t(self._leds)
+            if self._use_wrapper:
+                # WS2811Wrapper has its own cleanup method
+                self._leds.cleanup()
+            else:
+                # Old C API cleanup
+                driver.delete_ws2811_t(self._leds)
             self._leds = None
             self._channel = None
 
