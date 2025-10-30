@@ -171,7 +171,12 @@ class PiDiscoveryService:
     
     def _on_service_added(self, zeroconf: Zeroconf, service_type: str, name: str):
         """Handle newly discovered service"""
-        info = zeroconf.get_service_info(service_type, name)
+        # Use timeout parameter to avoid async issues with newer zeroconf versions
+        try:
+            info = zeroconf.get_service_info(service_type, name, timeout=3000)
+        except Exception as e:
+            logger.error(f"Failed to get service info for {name}: {e}")
+            return
         
         if info:
             # Don't add ourselves
