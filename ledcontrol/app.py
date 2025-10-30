@@ -218,9 +218,25 @@ def create_app(led_count,
         
         # Send to visualizer if connected and ArtNet is active
         if visualizer and artnet_server:
-            # ArtNet data is already in RGB format (RGBW bytes)
-            # Convert bytearray to list of RGB values for visualization
-            visualizer.update_pixels(data, led_count, 'rgb')
+            # ArtNet data contains RGBW bytes (4 bytes per LED)
+            # Convert RGBW to RGB by adding white channel to each color
+            channels_per_led = leds.getNrOfChannelsPerLed()
+            
+            if channels_per_led == 4:
+                # RGBW: Add W to R, G, B to show true brightness
+                rgb_data = []
+                for i in range(0, min(len(data), led_count * 4), 4):
+                    r, g, b, w = data[i], data[i+1], data[i+2], data[i+3]
+                    # Add white to each color channel, clamp to 255
+                    rgb_data.extend([
+                        min(255, r + w),
+                        min(255, g + w),
+                        min(255, b + w)
+                    ])
+                visualizer.update_pixels(rgb_data, led_count, 'rgb')
+            else:
+                # RGB or other format: send as-is
+                visualizer.update_pixels(data, led_count, 'rgb')
 
     def stop_current_animation():
         controller.end_animation()
