@@ -58,9 +58,34 @@ def main():
         # Disable auto-reload to prevent settings loss and animation interruption
         app.socketio.run(app, host=args.host, port=args.port, debug=True, use_reloader=False)
     else:
-        # Production mode: use bjoern (note: bjoern doesn't support WebSockets natively)
-        # For WebSocket support in production, consider using eventlet or gevent
-        print("Warning: Production mode with bjoern doesn't support WebSockets.")
-        print("LED Visualizer will not work. Use --dev flag or install eventlet/gevent.")
-        import bjoern
-        bjoern.run(app, host=args.host, port=args.port)
+        # Production mode: Try to use eventlet or gevent for WebSocket support
+        # Fall back to bjoern if neither is available (but WebSockets won't work)
+        try:
+            # Try eventlet first (recommended for Flask-SocketIO)
+            import eventlet
+            eventlet.monkey_patch()
+            print(f"Starting server with eventlet (WebSocket support enabled)")
+            app.socketio.run(app, host=args.host, port=args.port)
+        except ImportError:
+            try:
+                # Try gevent as fallback
+                from gevent import monkey
+                monkey.patch_all()
+                import gevent.pywsgi
+                from geventwebsocket.handler import WebSocketHandler
+                print(f"Starting server with gevent (WebSocket support enabled)")
+                app.socketio.run(app, host=args.host, port=args.port)
+            except ImportError:
+                # Fall back to bjoern (no WebSocket support)
+                print("Warning: Neither eventlet nor gevent found. WebSocket features will not work.")
+                print("Install eventlet for full WebSocket support: pip install eventlet")
+                print("LED Visualizer and real-time Discovery updates will not function.")
+                try:
+                    import bjoern
+                    print(f"Starting server with bjoern on {args.host}:{args.port}")
+                    bjoern.run(app, host=args.host, port=args.port)
+                except ImportError:
+                    print("Error: No suitable WSGI server found. Install eventlet or bjoern.")
+                    print("Install with: pip install eventlet")
+                    import sys
+                    sys.exit(1)
