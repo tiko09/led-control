@@ -53,7 +53,8 @@ def main():
     args = parser.parse_args()
 
     # Debug: Print dev flag status
-    print(f"DEBUG: args.dev = {args.dev}, sys.argv = {sys.argv}")
+    import sys as _sys
+    print(f"DEBUG: args.dev = {args.dev}, sys.argv = {_sys.argv}")
 
     app = create_app(args.led_count,
                      args.config_file,
@@ -106,5 +107,4 @@ def main():
                 except ImportError:
                     print("Error: No suitable WSGI server found. Install eventlet or bjoern.")
                     print("Install with: pip install eventlet")
-                    import sys
-                    sys.exit(1)
+                    _sys.exit(1)
