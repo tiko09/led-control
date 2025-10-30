@@ -180,9 +180,9 @@ class PiDiscoveryService:
             
             # Parse properties
             props = info.properties or {}
-            device_name = props.get(b'device_name', b'').decode('utf-8')
-            group = props.get(b'group', b'').decode('utf-8')
-            version = props.get(b'version', b'').decode('utf-8')
+            device_name = (props.get(b'device_name') or b'').decode('utf-8')
+            group = (props.get(b'group') or b'').decode('utf-8')
+            version = (props.get(b'version') or b'').decode('utf-8')
             
             # Convert addresses to string format
             addresses = [socket.inet_ntoa(addr) for addr in info.addresses]
