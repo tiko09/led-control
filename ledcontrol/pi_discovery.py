@@ -5,7 +5,13 @@ import socket
 import logging
 import time
 import threading
+import asyncio
 from zeroconf import ServiceInfo, Zeroconf, ServiceBrowser, ServiceStateChange
+try:
+    from zeroconf import AsyncServiceInfo
+    HAS_ASYNC_ZEROCONF = True
+except ImportError:
+    HAS_ASYNC_ZEROCONF = False
 from typing import Dict, List, Optional, Callable
 
 logger = logging.getLogger(__name__)
@@ -169,11 +175,36 @@ class PiDiscoveryService:
         elif state_change is ServiceStateChange.Updated:
             self._on_service_updated(zeroconf, service_type, name)
     
+    async def _get_service_info_async(self, zeroconf: Zeroconf, service_type: str, name: str):
+        """Get service info using async API if available"""
+        if HAS_ASYNC_ZEROCONF:
+            try:
+                aiozc = AsyncServiceInfo(service_type, name)
+                await aiozc.async_request(zeroconf, 3000)
+                return aiozc
+            except Exception as e:
+                logger.error(f"Failed to get async service info for {name}: {e}")
+                return None
+        else:
+            # Fallback to sync API for older versions
+            try:
+                return zeroconf.get_service_info(service_type, name, timeout=3000)
+            except Exception as e:
+                logger.error(f"Failed to get service info for {name}: {e}")
+                return None
+    
     def _on_service_added(self, zeroconf: Zeroconf, service_type: str, name: str):
         """Handle newly discovered service"""
-        # Use timeout parameter to avoid async issues with newer zeroconf versions
+        # Use async wrapper to get service info
         try:
-            info = zeroconf.get_service_info(service_type, name, timeout=3000)
+            # Create a new event loop if needed (zeroconf callbacks run in separate threads)
+            try:
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+            
+            info = loop.run_until_complete(self._get_service_info_async(zeroconf, service_type, name))
         except Exception as e:
             logger.error(f"Failed to get service info for {name}: {e}")
             return
