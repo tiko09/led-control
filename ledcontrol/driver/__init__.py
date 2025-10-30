@@ -756,6 +756,11 @@ elif pi_version == 3:
                 if strip is not None:
                     strip.show()
                 return 1
+            
+            def ws2811_render(strip):
+                """Render/update LEDs"""
+                if strip is not None:
+                    strip.show()
         
         except ImportError as e2:
             print(f"Error: Could not import rpi_ws281x on Raspberry Pi 3/4: {e2}")

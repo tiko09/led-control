@@ -179,7 +179,10 @@ class LEDController:
     def render(self):
         # send global render command if output mode is raspberry pi
         if driver.is_raspberrypi():
-            driver.ws2811_render(self._leds)
+            if self._use_wrapper:
+                self._leds.show()
+            else:
+                driver.ws2811_render(self._leds)
 
     def _send(self, packet, mode, target):
         try:
