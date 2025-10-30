@@ -205,41 +205,6 @@ export default {
                   </div>
                 </div>
               </div>
-
-              <!-- Logging -->
-              <div class="config-section">
-                <h4 class="section-subtitle">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                    <polyline points="14 2 14 8 20 8"></polyline>
-                    <line x1="16" y1="13" x2="8" y2="13"></line>
-                    <line x1="16" y1="17" x2="8" y2="17"></line>
-                    <polyline points="10 9 9 9 8 9"></polyline>
-                  </svg>
-                  Debug Logging
-                </h4>
-                <div class="config-grid">
-                  <div class="input-group">
-                    <label class="input-label">Log Level</label>
-                    <div class="input-with-button">
-                      <select class="select-modern" v-model="logLevel">
-                        <option v-for="lvl in logLevels" :value="lvl">{{ lvl }}</option>
-                      </select>
-                      <button 
-                        class="btn btn-secondary btn-sm" 
-                        @click="saveLogLevel" 
-                        :disabled="saving"
-                      >
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                          <polyline points="20 6 9 17 4 12"></polyline>
-                        </svg>
-                        Apply
-                      </button>
-                    </div>
-                    <span class="input-hint">Set logging verbosity level</span>
-                  </div>
-                </div>
-              </div>
             </div>
 
             <!-- Action Buttons -->
@@ -290,8 +255,6 @@ export default {
           artnet_spatial_smoothing: "none",
           artnet_spatial_size: 1,
         },
-        logLevel: "INFO",
-        logLevels: ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
       };
     },
     methods: {
@@ -345,29 +308,8 @@ export default {
           }
         }, 500); // 500ms debounce
       },
-      async saveLogLevel() {
-        this.saving = true;
-        try {
-          await fetch('/api/loglevel', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ log_level: this.logLevel })
-          });
-          this.message = "Log-Level gespeichert";
-          this.messageType = "ok";
-        } catch (e) {
-          this.message = "Fehler beim Speichern des Log-Levels";
-          this.messageType = "error";
-        }
-        this.saving = false;
-      },
     },
     async mounted() {
       this.load();
-      const r = await fetch('/api/loglevel');
-      if (r.ok) {
-        const j = await r.json();
-        this.logLevel = j.log_level || "INFO";
-      }
     }
   };
