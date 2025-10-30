@@ -12,7 +12,6 @@ export default {
       currentFps: 0,
       pixels: [],
       showBlur: true,
-      ledScale: 1.0,
       showStats: true,
       framesReceived: 0,
       lastFrameTime: 0,
@@ -22,10 +21,10 @@ export default {
   },
   computed: {
     ledSize() {
-      return Math.max(8, 20 * this.ledScale);
+      return 20;
     },
     ledGap() {
-      return Math.max(2, 4 * this.ledScale);
+      return 4;
     }
   },
   methods: {
@@ -156,14 +155,6 @@ export default {
 
     toggleBlur() {
       this.drawLEDs();
-    },
-
-    updateScale(event) {
-      this.ledScale = parseFloat(event.target.value);
-      this.$nextTick(() => {
-        this.initCanvas();
-        this.drawLEDs();
-      });
     }
   },
 
@@ -213,19 +204,6 @@ export default {
                   Diffusion Effect (Milky Glass)
                 </span>
               </label>
-            </div>
-
-            <div class="control-group">
-              <label class="input-label">LED Scale: {{ ledScale.toFixed(1) }}x</label>
-              <input 
-                type="range" 
-                class="slider-input" 
-                min="0.5" 
-                max="3" 
-                step="0.1" 
-                :value="ledScale"
-                @input="updateScale"
-              >
             </div>
 
             <div class="control-group">
