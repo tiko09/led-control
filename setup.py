@@ -46,7 +46,6 @@ requirements = [
     'flask-socketio>=5.3.0',
     'python-socketio>=5.7.0',
     'RestrictedPython>=5.2',
-    'sacn>=1.8.1',
     'HAP-python==4.4.0',
     'pyopenssl==22.1.0',
     'numpy==1.26.4',

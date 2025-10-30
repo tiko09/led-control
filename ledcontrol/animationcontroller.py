@@ -7,7 +7,6 @@ import time
 import traceback
 import logging
 import RestrictedPython
-import sacn
 import collections
 
 logger = logging.getLogger(__name__)
@@ -27,14 +26,12 @@ class AnimationController:
                  refresh_rate,
                  led_count,
                  mapping_func,
-                 enable_sacn,
                  no_timer_reset,
                  global_brightness_limit):
         self._led_controller = led_controller
         self._refresh_rate = refresh_rate
         self._led_count = led_count
         self._mapping_func = mapping_func
-        self._enable_sacn = enable_sacn
         self._no_timer_reset = no_timer_reset
         self._global_brightness_limit = global_brightness_limit
 
@@ -57,7 +54,6 @@ class AnimationController:
             'global_color_g': 190,
             'global_color_b': 170,
             'global_saturation': 1.0,
-            'sacn': 0,
             'calibration': 0,
             'groups': {
                 'main': {
@@ -104,13 +100,6 @@ class AnimationController:
         self._update_needed = True # Is the LED state going to change this frame?
         self._force_next_update = False # Force one more update even for static patterns
 
-        # Initialize sACN / E1.31
-        if enable_sacn:
-            self._sacn_buffer = [(0, 0, 0) for i in range(self._led_count)]
-            self._last_sacn_time = 0
-            self._sacn_perf_avg = 0
-            self._sacn_count = 0
-        
         # LED Visualizer for browser display (optional)
         self._visualizer = None
 
@@ -214,13 +203,6 @@ class AnimationController:
                     self._flag_clear = True # clear LEDs to make range selection less ambiguous
                 elif k in ['render_mode', 'render_target']:
                     self._flag_clear = True
-                elif k == 'sacn' and self._enable_sacn:
-                    if v:
-                        self._receiver = sacn.sACNreceiver()
-                        self._receiver.listen_on('universe', universe=1)(self._sacn_callback)
-                        self._receiver.start()
-                    elif hasattr(self, '_receiver'):
-                        self._receiver.stop()
 
             return d1
 
@@ -393,47 +375,31 @@ class AnimationController:
                     continue
 
                 try:
-                    if self._settings['sacn'] == 0:
-                        # Determine current pattern mode
-                        c, mode = function_1(0, 0.1, 0, 0, 0, (0, 0, 0))
+                    # Determine current pattern mode
+                    c, mode = function_1(0, 0.1, 0, 0, 0, (0, 0, 0))
 
-                        # Run pattern to determine color
-                        # Enumerate over range for cleaner indexing
-                        state = [function_1(time_1,
-                                            delta_t_1,
-                                            mapping[i][0],
-                                            mapping[i][1],
-                                            mapping[i][2],
-                                            self._prev_state[i])[0]
-                                for i in range(range_start, range_end)]
-                        self._prev_state[range_start:range_end] = state
+                    # Run pattern to determine color
+                    # Enumerate over range for cleaner indexing
+                    state = [function_1(time_1,
+                                        delta_t_1,
+                                        mapping[i][0],
+                                        mapping[i][1],
+                                        mapping[i][2],
+                                        self._prev_state[i])[0]
+                            for i in range(range_start, range_end)]
+                    self._prev_state[range_start:range_end] = state
 
-                        self._led_controller.set_range(
-                            state,
-                            range_start,
-                            range_end,
-                            self._correction,
-                            computed_saturation,
-                            computed_brightness,
-                            mode,
-                            settings['render_mode'],
-                            settings['render_target']
-                        )
-
-                    else:
-                        # sACN/E1.31 mode
-                        sacn_slice = self._sacn_buffer[range_start:range_end]
-                        self._led_controller.set_range(
-                            sacn_slice,
-                            range_start,
-                            range_end,
-                            self._correction,
-                            1.0,
-                            self._settings['global_brightness'],
-                            animfunctions.ColorMode.rgb,
-                            settings['render_mode'],
-                            settings['render_target']
-                        )
+                    self._led_controller.set_range(
+                        state,
+                        range_start,
+                        range_end,
+                        self._correction,
+                        computed_saturation,
+                        computed_brightness,
+                        mode,
+                        settings['render_mode'],
+                        settings['render_target']
+                    )
 
                 except Exception as e:
                     logger.error(f'Error during animation execution', exc_info=True)
@@ -472,14 +438,6 @@ class AnimationController:
             
             # Send complete LED state to visualizer after rendering all groups
             if self._visualizer:
-                if self._settings['sacn'] == 1:
-                    # In sACN mode, use the sACN buffer
-                    self._visualizer.update_pixels(
-                        self._sacn_buffer[:self._led_count],
-                        self._led_count,
-                        'rgb'
-                    )
-                else:
                     # In pattern mode, use _prev_state (which contains all groups)
                     # Determine the mode from the first group's function
                     first_group_settings = list(self._settings['groups'].values())[0]
@@ -491,20 +449,6 @@ class AnimationController:
                             self._led_count,
                             'hsv' if mode == animfunctions.ColorMode.hsv else 'rgb'
                         )
-
-    def _sacn_callback(self, packet):
-        'Callback for sACN / E1.31 client'
-        sacn_time = time.perf_counter()
-        self._sacn_perf_avg += (sacn_time - self._last_sacn_time)
-        self._last_sacn_time = sacn_time
-
-        self._sacn_count += 1
-        if self._sacn_count % 100 == 0:
-            logger.debug('Average sACN rate (packets/s): {}'.format(1 / (self._sacn_perf_avg / 100)))
-            self._sacn_perf_avg = 0
-
-        data = [x / 255.0 for x in packet.dmxData[:self._led_count * 3]]
-        self._sacn_buffer = list(zip_longest(*(iter(data),) * 3))
 
     def clear_leds(self):
         'Turn all LEDs off'
@@ -523,10 +467,10 @@ class AnimationController:
         self._led_controller.render()
 
     def end_animation(self):
-        'Stop rendering in the animation thread and stop sACN receiver'
+        'Stop rendering in the animation thread receiver'
         self._timer.stop()
         try:
-            if self._enable_sacn and self._receiver:
+            if self._receiver:
                 self._receiver.stop()
         except:
             pass

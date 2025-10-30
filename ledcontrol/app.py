@@ -33,7 +33,6 @@ def create_app(led_count,
                led_pixel_order,
                led_brightness_limit,
                save_interval,
-               enable_sacn,
                enable_hap,
                no_timer_reset,
                dev):
@@ -64,7 +63,6 @@ def create_app(led_count,
                                      refresh_rate,
                                      led_count,
                                      mapping_func,
-                                     enable_sacn,
                                      no_timer_reset,
                                      led_brightness_limit)
     

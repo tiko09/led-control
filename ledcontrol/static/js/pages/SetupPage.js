@@ -9,7 +9,6 @@ export default {
   components: { ArtnetConfig },
   data() {
     return {
-      sacn: store.get('sacn'),
       calibration: store.get('calibration'),
       groupListKey: 0,
       logLevel: 'INFO',
@@ -23,9 +22,6 @@ export default {
     }
   },
   methods: {
-    updateSACN() {
-      store.set('sacn', parseInt(this.sacn, 10));
-    },
     updateCalibration() {
       store.set('calibration', parseInt(this.calibration, 10));
     },
@@ -123,33 +119,6 @@ export default {
               autocomplete="off"
               v-model="calibration"
               @change="updateCalibration"
-            >
-              <option value="0">Off</option>
-              <option value="1">On</option>
-            </select>
-          </div>
-        </div>
-      </div>
-
-      <!-- Control Protocol Card -->
-      <div class="card">
-        <div class="card-header">
-          <div class="card-header-left">
-            <svg class="card-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
-              <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
-            </svg>
-            <h2 class="card-title">Control Protocol</h2>
-          </div>
-        </div>
-        <div class="card-body">
-          <div class="input-group">
-            <label class="input-label">E1.31 sACN Control</label>
-            <select
-              class="select-modern"
-              autocomplete="off"
-              v-model="sacn"
-              @change="updateSACN"
             >
               <option value="0">Off</option>
               <option value="1">On</option>
