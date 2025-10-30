@@ -4,7 +4,25 @@
 import io
 import math
 
-# Removed is_raspberrypi() - using get_raspberry_pi_version() instead
+def get_raspberry_pi_version():
+    """
+    Detect Raspberry Pi model and return version number.
+    Returns: 5 for Pi 5, 3 for Pi 3/4, 0 for non-Pi systems
+    """
+    try:
+        with io.open('/sys/firmware/devicetree/base/model', 'r') as m:
+            model = m.read().lower()
+            if 'raspberry pi 5' in model:
+                return 5
+            elif 'raspberry pi' in model:
+                return 3
+    except Exception:
+        pass
+    return 0
+
+def is_raspberrypi():
+    """Check if running on any Raspberry Pi"""
+    return get_raspberry_pi_version() > 0
 
 # Always import utility functions - prefer C extension for performance, fallback to Python
 # These are needed for animation calculations regardless of platform
@@ -151,22 +169,7 @@ except ImportError as e:
         bb = blackbody_to_rgb(kelvin)
         return [rgb[0] * bb[0], rgb[1] * bb[1], rgb[2] * bb[2]]
 
-def get_raspberry_pi_version():
-    """
-    Detect Raspberry Pi model and return version number.
-    Returns: 5 for Pi 5, 3 for Pi 3/4, 0 for non-Pi systems
-    """
-    try:
-        with io.open('/sys/firmware/devicetree/base/model', 'r') as m:
-            model = m.read().lower()
-            if 'raspberry pi 5' in model:
-                return 5
-            elif 'raspberry pi' in model:
-                return 3
-    except Exception:
-        pass
-    return 0
-
+# Get Pi version once at module import time
 pi_version = get_raspberry_pi_version()
 
 if pi_version == 5:
