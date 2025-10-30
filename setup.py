@@ -128,7 +128,7 @@ if sys.platform.startswith('linux'):
             rpi_ws281x_extension = Extension(
                 '_ledcontrol_rpi_ws281x_driver',
                 sources=[
-                    'ledcontrol/driver/ledcontrol_rpi_ws281x_driver_wrap.c',
+                    'ledcontrol/driver/ledcontrol_rpi_ws281x_driver.i',  # SWIG will generate _wrap.c
                     'ledcontrol/driver/rpi_ws281x/ws2811.c',
                     'ledcontrol/driver/rpi_ws281x/pwm.c',
                     'ledcontrol/driver/rpi_ws281x/dma.c',
@@ -142,6 +142,7 @@ if sys.platform.startswith('linux'):
                 ],
                 extra_compile_args=['-O3', '-std=c99'],
                 extra_link_args=['-lm'],
+                swig_opts=['-I/usr/include'],  # Help SWIG find system headers
             )
             print("Building custom rpi_ws281x driver for Raspberry Pi 3/4")
         
