@@ -92,6 +92,7 @@ else:
 # SWIG extensions for performance-critical functions
 animation_utils_extension = None
 artnet_utils_extension = None
+rpi_ws281x_extension = None
 
 # Only build extensions if we're on a system with a compiler and SWIG
 # The extensions provide better performance but are not required
@@ -121,6 +122,29 @@ if sys.platform.startswith('linux'):
             extra_compile_args=['-O3', '-std=c99'],
             extra_link_args=['-lm'],
         )
+        
+        # For Raspberry Pi 3/4: Build custom rpi_ws281x driver wrapper
+        if pi_version == 3:
+            rpi_ws281x_extension = Extension(
+                '_ledcontrol_rpi_ws281x_driver',
+                sources=[
+                    'ledcontrol/driver/ledcontrol_rpi_ws281x_driver_wrap.c',
+                    'ledcontrol/driver/rpi_ws281x/ws2811.c',
+                    'ledcontrol/driver/rpi_ws281x/pwm.c',
+                    'ledcontrol/driver/rpi_ws281x/dma.c',
+                    'ledcontrol/driver/rpi_ws281x/pcm.c',
+                    'ledcontrol/driver/rpi_ws281x/rpihw.c',
+                    'ledcontrol/driver/rpi_ws281x/mailbox.c',
+                ],
+                include_dirs=[
+                    'ledcontrol/driver',
+                    'ledcontrol/driver/rpi_ws281x',
+                ],
+                extra_compile_args=['-O3', '-std=c99'],
+                extra_link_args=['-lm'],
+            )
+            print("Building custom rpi_ws281x driver for Raspberry Pi 3/4")
+        
         print("SWIG found - C extensions will be built for maximum performance")
     else:
         print("Warning: SWIG not found. C extensions will not be built.")
@@ -140,7 +164,7 @@ setup(
     zip_safe=False,
     install_requires=requirements,
     setup_requires=requirements,
-    ext_modules=[ext for ext in [animation_utils_extension, artnet_utils_extension] if ext is not None],
+    ext_modules=[ext for ext in [animation_utils_extension, artnet_utils_extension, rpi_ws281x_extension] if ext is not None],
     cmdclass={'build_ext': build_ext},
     include_package_data=True,
     entry_points={
