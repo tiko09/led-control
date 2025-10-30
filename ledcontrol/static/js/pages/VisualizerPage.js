@@ -155,14 +155,15 @@ export default {
     },
 
     toggleBlur() {
-      console.log('toggleBlur called, showBlur:', this.showBlur);
       this.drawLEDs();
     },
 
-    updateScale() {
-      console.log('updateScale called, ledScale:', this.ledScale);
-      this.initCanvas();
-      this.drawLEDs();
+    updateScale(event) {
+      this.ledScale = parseFloat(event.target.value);
+      this.$nextTick(() => {
+        this.initCanvas();
+        this.drawLEDs();
+      });
     }
   },
 
@@ -222,7 +223,7 @@ export default {
                 min="0.5" 
                 max="3" 
                 step="0.1" 
-                v-model.number="ledScale"
+                :value="ledScale"
                 @input="updateScale"
               >
             </div>
