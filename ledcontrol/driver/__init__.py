@@ -4,14 +4,7 @@
 import io
 import math
 
-def is_raspberrypi():
-    try:
-        with io.open('/sys/firmware/devicetree/base/model', 'r') as m:
-            if 'raspberry pi' in m.read().lower():
-                return True
-    except Exception:
-        pass
-    return False
+# Removed is_raspberrypi() - using get_raspberry_pi_version() instead
 
 # Always import utility functions - prefer C extension for performance, fallback to Python
 # These are needed for animation calculations regardless of platform
@@ -158,9 +151,29 @@ except ImportError as e:
         bb = blackbody_to_rgb(kelvin)
         return [rgb[0] * bb[0], rgb[1] * bb[1], rgb[2] * bb[2]]
 
-if is_raspberrypi():
+def get_raspberry_pi_version():
+    """
+    Detect Raspberry Pi model and return version number.
+    Returns: 5 for Pi 5, 3 for Pi 3/4, 0 for non-Pi systems
+    """
+    try:
+        with io.open('/sys/firmware/devicetree/base/model', 'r') as m:
+            model = m.read().lower()
+            if 'raspberry pi 5' in model:
+                return 5
+            elif 'raspberry pi' in model:
+                return 3
+    except Exception:
+        pass
+    return 0
+
+pi_version = get_raspberry_pi_version()
+
+if pi_version == 5:
+    # Raspberry Pi 5: Use SPI-based driver
     try:
         from rpi5_ws2812.ws2812 import Color, WS2812SpiDriver
+        print("Using rpi5-ws2812 driver for Raspberry Pi 5 (SPI-based)")
         
         # Strip type constants (compatible with rpi_ws281x)
         # Note: rpi5-ws2812 doesn't use these, but we keep them for compatibility
@@ -508,9 +521,98 @@ if is_raspberrypi():
             return 1
         
     except ImportError as e:
-        print(f"Warning: Could not import rpi5_ws2812: {e}")
-        # Import the WS2811Wrapper fallback class (utility functions already imported above)
+        print(f"Error: Could not import rpi5_ws2812 on Raspberry Pi 5: {e}")
+        print("Install with: pip install rpi5-ws2812")
+        # Fallback to non-Pi driver
         from .driver_non_raspberry_pi import WS2811Wrapper
+
+elif pi_version == 3:
+    # Raspberry Pi 3/4: Use PWM-based driver
+    try:
+        from rpi_ws281x import PixelStrip, Color
+        print("Using rpi_ws281x driver for Raspberry Pi 3/4 (PWM-based)")
+        
+        # Wrapper class to provide consistent API
+        class WS2811Wrapper:
+            """Wrapper for rpi_ws281x PixelStrip"""
+            def __init__(self, led_count, led_pin, led_freq, led_dma, led_invert, led_brightness, led_channel, strip_type):
+                self.strip = PixelStrip(
+                    led_count,
+                    led_pin,
+                    led_freq,
+                    led_dma,
+                    led_invert,
+                    led_brightness,
+                    led_channel,
+                    strip_type
+                )
+                self.led_count = led_count
+                self.strip_type = strip_type
+                self.has_white = (strip_type & 0x18000000) != 0
+            
+            def begin(self):
+                self.strip.begin()
+                return 0
+            
+            def show(self):
+                self.strip.show()
+            
+            def setPixelColor(self, index, color):
+                self.strip.setPixelColor(index, color)
+            
+            def getPixelColor(self, index):
+                return self.strip.getPixelColor(index)
+            
+            def setBrightness(self, brightness):
+                self.strip.setBrightness(brightness)
+            
+            def getBrightness(self):
+                return self.strip.getBrightness()
+            
+            def cleanup(self):
+                pass  # rpi_ws281x handles cleanup automatically
+        
+        # Re-export constants and functions from rpi_ws281x
+        from rpi_ws281x import (
+            WS2811_STRIP_RGB, WS2811_STRIP_RBG, WS2811_STRIP_GRB,
+            WS2811_STRIP_GBR, WS2811_STRIP_BRG, WS2811_STRIP_BGR,
+            SK6812_STRIP_RGBW, SK6812_STRIP_RBGW, SK6812_STRIP_GRBW,
+            SK6812_STRIP_GBRW, SK6812_STRIP_BRGW, SK6812_STRIP_BGRW,
+            ws2811_led_t, new_ws2811_t, ws2811_channel_get,
+            ws2811_channel_t_count_set, ws2811_channel_t_gpionum_set,
+            ws2811_channel_t_invert_set, ws2811_channel_t_brightness_set,
+            ws2811_channel_t_strip_type_set, ws2811_channel_t_gamma_set,
+            ws2811_t_freq_set, ws2811_t_dmanum_set,
+            ws2811_init, ws2811_fini, ws2811_render,
+            ws2811_led_set, ws2811_led_get,
+            ws2811_get_return_t_str, delete_ws2811_t
+        )
+        
+        # Helper functions that might not be in rpi_ws281x
+        try:
+            from rpi_ws281x import hsv2rgb_rainbow_float as render_hsv2rgb_rainbow_float
+        except ImportError:
+            # Provide fallback implementation
+            def render_hsv2rgb_rainbow_float(hsv, corr_rgb, saturation, brightness, has_white):
+                """Fallback HSV to RGB conversion"""
+                import colorsys
+                h, s, v = hsv
+                r, g, b = colorsys.hsv_to_rgb(h, s * saturation, v * brightness)
+                r = int(r * corr_rgb[0] * 255)
+                g = int(g * corr_rgb[1] * 255)
+                b = int(b * corr_rgb[2] * 255)
+                if has_white:
+                    return ((0 & 0xFF) << 24) | ((r & 0xFF) << 16) | ((g & 0xFF) << 8) | (b & 0xFF)
+                else:
+                    return ((r & 0xFF) << 16) | ((g & 0xFF) << 8) | (b & 0xFF)
+    
+    except ImportError as e:
+        print(f"Error: Could not import rpi_ws281x on Raspberry Pi 3/4: {e}")
+        print("Install with: pip install rpi_ws281x")
+        # Fallback to non-Pi driver
+        from .driver_non_raspberry_pi import WS2811Wrapper
+
 else:
-    # Import the WS2811Wrapper fallback class (utility functions already imported above)
+    # Non-Raspberry Pi system: Use simulation driver
+    print("Non-Raspberry Pi system detected - using simulation mode")
     from .driver_non_raspberry_pi import WS2811Wrapper

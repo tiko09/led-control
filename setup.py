@@ -6,14 +6,25 @@ import shutil
 from setuptools import find_packages, setup, Extension
 from setuptools.command.build_ext import build_ext as _build_ext
 
-def is_raspberrypi():
+def get_raspberry_pi_version():
+    """
+    Detect Raspberry Pi model and return version number.
+    Returns: 5 for Pi 5, 3 for Pi 3/4, 0 for non-Pi systems
+    """
     try:
         with io.open('/sys/firmware/devicetree/base/model', 'r') as m:
-            if 'raspberry pi' in m.read().lower():
-                return True
+            model = m.read().lower()
+            if 'raspberry pi 5' in model:
+                return 5
+            elif 'raspberry pi' in model:
+                # Pi 3, Pi 4, or older
+                return 3
     except Exception:
         pass
-    return False
+    return 0
+
+def is_raspberrypi():
+    return get_raspberry_pi_version() > 0
 
 # Custom build_ext to copy .so files to the correct package directories
 class build_ext(_build_ext):
@@ -41,6 +52,10 @@ class build_ext(_build_ext):
         else:
             print(f"Warning: Extension {ext.name} not found at {ext_path}")
 
+# Detect Raspberry Pi version for conditional dependencies
+pi_version = get_raspberry_pi_version()
+
+# Base requirements for all platforms
 requirements = [
     'Flask==2.2.2',
     'flask-socketio>=5.3.0',
@@ -54,9 +69,25 @@ requirements = [
     'zeroconf>=0.132.0',
     'requests>=2.28.0',
     'eventlet>=0.33.0',
-] + (['bjoern>=3.2.1'] if sys.platform.startswith('linux') else []) + (
-    ['rpi5-ws2812'] if is_raspberrypi() else ['pyfastnoisesimd>=0.4.2']
-)
+]
+
+# Add Linux-specific dependencies
+if sys.platform.startswith('linux'):
+    requirements.append('bjoern>=3.2.1')
+
+# Add Raspberry Pi specific LED drivers
+if pi_version == 5:
+    # Raspberry Pi 5: Use SPI-based driver
+    requirements.append('rpi5-ws2812')
+    print("Detected Raspberry Pi 5 - will use rpi5-ws2812 driver (SPI-based)")
+elif pi_version == 3:
+    # Raspberry Pi 3/4: Use PWM-based driver
+    requirements.append('rpi_ws281x')
+    print("Detected Raspberry Pi 3/4 - will use rpi_ws281x driver (PWM-based)")
+else:
+    # Non-Raspberry Pi: Use fast noise library for development
+    requirements.append('pyfastnoisesimd>=0.4.2')
+    print("Non-Raspberry Pi system detected - using simulation mode")
 
 # SWIG extensions for performance-critical functions
 animation_utils_extension = None
