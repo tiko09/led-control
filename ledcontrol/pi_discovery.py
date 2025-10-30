@@ -175,76 +175,83 @@ class PiDiscoveryService:
         elif state_change is ServiceStateChange.Updated:
             self._on_service_updated(zeroconf, service_type, name)
     
-    def _get_service_info_sync(self, zeroconf: Zeroconf, service_type: str, name: str):
-        """Get service info in a thread-safe way"""
-        if HAS_ASYNC_ZEROCONF:
+    def _get_service_info_in_thread(self, zeroconf: Zeroconf, service_type: str, name: str):
+        """
+        Get service info in a separate daemon thread to avoid event loop conflicts.
+        This is called asynchronously and will update the device list when complete.
+        """
+        def fetch_and_add():
             try:
-                # Run async operation in a new thread with its own event loop
-                def run_async():
-                    # Create a fresh event loop for this thread
+                if HAS_ASYNC_ZEROCONF:
+                    # Create isolated event loop for this thread
                     loop = asyncio.new_event_loop()
                     asyncio.set_event_loop(loop)
+                    
                     try:
-                        aiozc = AsyncServiceInfo(service_type, name)
-                        loop.run_until_complete(aiozc.async_request(zeroconf, 3000))
-                        return aiozc
+                        async def fetch():
+                            aiozc = AsyncServiceInfo(service_type, name)
+                            await aiozc.async_request(zeroconf, 3000)
+                            return aiozc
+                        
+                        info = loop.run_until_complete(fetch())
                     finally:
                         loop.close()
+                else:
+                    # Older zeroconf version
+                    info = zeroconf.get_service_info(service_type, name, timeout=3000)
                 
-                import concurrent.futures
-                with concurrent.futures.ThreadPoolExecutor() as executor:
-                    future = executor.submit(run_async)
-                    return future.result(timeout=5)
+                if info:
+                    self._process_service_info(name, info)
+                    
             except Exception as e:
                 logger.error(f"Failed to get service info for {name}: {e}")
-                return None
-        else:
-            # Fallback to sync API for older versions
-            try:
-                return zeroconf.get_service_info(service_type, name, timeout=3000)
-            except Exception as e:
-                logger.error(f"Failed to get service info for {name}: {e}")
-                return None
+        
+        # Start in daemon thread so it doesn't block
+        thread = threading.Thread(target=fetch_and_add, daemon=True)
+        thread.start()
     
-    def _on_service_added(self, zeroconf: Zeroconf, service_type: str, name: str):
-        """Handle newly discovered service"""
-        try:
-            info = self._get_service_info_sync(zeroconf, service_type, name)
-        except Exception as e:
-            logger.error(f"Failed to get service info for {name}: {e}")
+    def _process_service_info(self, name: str, info):
+        """Process discovered service info and add to device list"""
+        # Don't add ourselves
+        if self.service_info and name == self.service_info.name:
             return
         
-        if info:
-            # Don't add ourselves
-            if self.service_info and name == self.service_info.name:
-                return
-            
-            # Parse properties
-            props = info.properties or {}
-            device_name = (props.get(b'device_name') or b'').decode('utf-8')
-            group = (props.get(b'group') or b'').decode('utf-8')
-            version = (props.get(b'version') or b'').decode('utf-8')
-            
-            # Convert addresses to string format
-            addresses = [socket.inet_ntoa(addr) for addr in info.addresses]
-            
-            pi_info = PiInfo(
-                name=name,
-                hostname=info.server.rstrip('.'),
-                port=info.port,
-                addresses=addresses,
-                device_name=device_name,
-                group=group,
-                version=version
-            )
-            
-            with self.lock:
-                self.devices[name] = pi_info
-            
-            logger.info(f"Discovered Pi: {device_name} ({pi_info.primary_address}:{info.port})")
-            
-            if self.on_device_change:
-                self.on_device_change('added', pi_info)
+        # Parse properties
+        props = info.properties or {}
+        device_name = (props.get(b'device_name') or b'').decode('utf-8')
+        group = (props.get(b'group') or b'').decode('utf-8')
+        version = (props.get(b'version') or b'').decode('utf-8')
+        
+        # Convert addresses to string format
+        addresses = [socket.inet_ntoa(addr) for addr in info.addresses]
+        
+        pi_info = PiInfo(
+            name=name,
+            hostname=info.server.rstrip('.'),
+            port=info.port,
+            addresses=addresses,
+            device_name=device_name,
+            group=group,
+            version=version
+        )
+        
+        with self.lock:
+            self.devices[name] = pi_info
+        
+        logger.info(f"Discovered Pi: {device_name} ({pi_info.primary_address}:{info.port})")
+        
+        if self.on_device_change:
+            self.on_device_change('added', pi_info)
+    
+    def _on_service_added(self, zeroconf: Zeroconf, service_type: str, name: str):
+        """Handle newly discovered service - fetches info asynchronously"""
+        # Don't process ourselves
+        if self.service_info and name == self.service_info.name:
+            return
+        
+        # Fetch service info in separate thread to avoid event loop conflicts
+        logger.debug(f"Service added, fetching info for: {name}")
+        self._get_service_info_in_thread(zeroconf, service_type, name)
     
     def _on_service_removed(self, name: str):
         """Handle service removal"""
