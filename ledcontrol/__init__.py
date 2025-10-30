@@ -8,7 +8,8 @@ _use_eventlet = '--dev' not in sys.argv
 if _use_eventlet:
     try:
         import eventlet
-        eventlet.monkey_patch()
+        # Monkey patch but exclude thread to avoid breaking zeroconf
+        eventlet.monkey_patch(thread=False)
     except ImportError:
         pass  # Will handle this later in main()
 

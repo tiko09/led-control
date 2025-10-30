@@ -4,7 +4,6 @@
 import socket
 import logging
 import time
-import threading
 import asyncio
 from zeroconf import ServiceInfo, Zeroconf, ServiceBrowser, ServiceStateChange
 try:
@@ -13,6 +12,15 @@ try:
 except ImportError:
     HAS_ASYNC_ZEROCONF = False
 from typing import Dict, List, Optional, Callable
+
+# Import native threading before eventlet patches it
+import sys
+if 'eventlet' in sys.modules:
+    # eventlet is loaded, get native threading
+    import importlib
+    threading = importlib.import_module('threading')
+else:
+    import threading
 
 logger = logging.getLogger(__name__)
 
