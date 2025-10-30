@@ -224,19 +224,27 @@ def create_app(led_count,
             
             if channels_per_led == 4:
                 # RGBW: Add W to R, G, B to show true brightness
+                # Normalize to 0-1 range for visualizer (it will scale to 0-255)
                 rgb_data = []
                 for i in range(0, min(len(data), led_count * 4), 4):
                     r, g, b, w = data[i], data[i+1], data[i+2], data[i+3]
-                    # Add white to each color channel, clamp to 255
-                    rgb_data.extend([
-                        min(255, r + w),
-                        min(255, g + w),
-                        min(255, b + w)
-                    ])
+                    # Add white to each color channel, clamp to 255, then normalize to 0-1
+                    rgb_data.append((
+                        min(255, r + w) / 255.0,
+                        min(255, g + w) / 255.0,
+                        min(255, b + w) / 255.0
+                    ))
                 visualizer.update_pixels(rgb_data, led_count, 'rgb')
             else:
-                # RGB or other format: send as-is
-                visualizer.update_pixels(data, led_count, 'rgb')
+                # RGB or other format: normalize to 0-1 range
+                rgb_data = []
+                for i in range(0, min(len(data), led_count * 3), 3):
+                    rgb_data.append((
+                        data[i] / 255.0,
+                        data[i+1] / 255.0,
+                        data[i+2] / 255.0
+                    ))
+                visualizer.update_pixels(rgb_data, led_count, 'rgb')
 
     def stop_current_animation():
         controller.end_animation()
