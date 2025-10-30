@@ -51,6 +51,8 @@ requirements = [
     'numpy==1.26.4',
     'pyserial>=3.5',
     'Werkzeug==2.2.2',
+    'zeroconf>=0.132.0',
+    'requests>=2.28.0',
 ] + (['bjoern>=3.2.1'] if sys.platform.startswith('linux') else []) + (
     ['rpi5-ws2812'] if is_raspberrypi() else ['pyfastnoisesimd>=0.4.2']
 )

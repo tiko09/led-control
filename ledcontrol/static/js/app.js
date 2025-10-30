@@ -6,6 +6,7 @@ import store from './Store.js';
 import SetupPage from './pages/SetupPage.js';
 import ControlPage from './pages/ControlPage.js';
 import VisualizerPage from './pages/VisualizerPage.js';
+import DiscoveryPage from './pages/DiscoveryPage.js';
 
 import SliderNumberInput from './components/SliderNumberInput.js';
 import PaletteColorBar from './components/PaletteColorBar.js';
@@ -19,6 +20,7 @@ const routes = [
   { path: '/', component: ControlPage },
   { path: '/setup', component: SetupPage },
   { path: '/visualizer', component: VisualizerPage },
+  { path: '/discovery', component: DiscoveryPage },
 ];
 
 const router = VueRouter.createRouter({

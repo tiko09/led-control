@@ -14,11 +14,13 @@ from ledcontrol.ledcontroller import LEDController
 from ledcontrol.homekit import homekit_start
 from ledcontrol.artnet_server import ArtNetServer
 from ledcontrol.led_visualizer import LEDVisualizer
+from ledcontrol.pi_discovery import PiDiscoveryService
 
 import ledcontrol.pixelmappings as pixelmappings
 import ledcontrol.animationfunctions as animfunctions
 import ledcontrol.colorpalettes as colorpalettes
 import ledcontrol.utils as utils
+import requests
 
 import logging
 logging.basicConfig(level=logging.INFO)
@@ -209,6 +211,45 @@ def create_app(led_count,
                     settings[k] = config_defaults[k]
 
     artnet_server = None
+    
+    # Initialize Pi Discovery Service
+    discovery_service = None
+    pi_master_mode = settings.get('pi_master_mode', False)
+    pi_device_name = settings.get('pi_device_name', '')
+    pi_group = settings.get('pi_group', '')
+    
+    def on_device_change(change_type, pi_info):
+        """Callback when a Pi is discovered/removed"""
+        app.logger.info(f"Pi {change_type}: {pi_info.device_name} ({pi_info.primary_address})")
+        
+        # Notify connected clients via WebSocket
+        if socketio:
+            socketio.emit('pi_discovered' if change_type == 'added' else 'pi_removed', 
+                         pi_info.to_dict(), 
+                         namespace='/discovery')
+    
+    def start_discovery_service():
+        """Start the Pi discovery service"""
+        nonlocal discovery_service
+        if discovery_service:
+            discovery_service.stop()
+        
+        # Get port from Flask app (default to 80)
+        import os
+        port = int(os.environ.get('PORT', 80))
+        
+        discovery_service = PiDiscoveryService(
+            port=port,
+            device_name=pi_device_name,
+            group=pi_group,
+            version='2.0.0',
+            on_device_change=on_device_change
+        )
+        discovery_service.start()
+    
+    # Start discovery service
+    start_discovery_service()
+    atexit.register(lambda: discovery_service.stop() if discovery_service else None)
 
     def set_led(data: bytes, index: int):
         """Set LED data from ArtNet Server and notify visualizer"""
@@ -365,6 +406,9 @@ def create_app(led_count,
             "artnet_universe": settings["artnet_universe"],
             "artnet_channel_offset": settings["artnet_channel_offset"],
             "artnet_group_size": settings.get("artnet_group_size", 1),
+            "pi_device_name": settings.get("pi_device_name", ""),
+            "pi_group": settings.get("pi_group", ""),
+            "pi_master_mode": settings.get("pi_master_mode", False),
         })
         try:
             with filename.open('w') as data_file:
@@ -527,6 +571,232 @@ def create_app(led_count,
         set_log_level(level)
         return {"status": "ok"}
     
+    # ============================================================================
+    # Pi Discovery & Sync API Endpoints
+    # ============================================================================
+    
+    @app.get("/api/pi/info")
+    def api_get_pi_info():
+        """Get information about this Pi"""
+        import socket
+        hostname = socket.gethostname()
+        
+        return {
+            "device_name": pi_device_name or hostname,
+            "hostname": hostname,
+            "group": pi_group,
+            "master_mode": pi_master_mode,
+            "version": "2.0.0",
+            "led_count": led_count,
+        }
+    
+    @app.get("/api/pi/state")
+    def api_get_pi_state():
+        """Get current animation state (for syncing to other Pis)"""
+        current_settings = controller.get_settings()
+        
+        # Get the main group's settings (or first group)
+        groups = current_settings.get('groups', {})
+        main_group = groups.get('main', next(iter(groups.values()), {}))
+        
+        return {
+            "device_name": pi_device_name,
+            "group": pi_group,
+            "settings": {
+                "global_brightness": current_settings.get('global_brightness', 1.0),
+                "global_color_temp": current_settings.get('global_color_temp', 6500),
+                "global_saturation": current_settings.get('global_saturation', 1.0),
+                "on": current_settings.get('on', True),
+            },
+            "animation": {
+                "function": main_group.get('function', 0),
+                "speed": main_group.get('speed', 1.0),
+                "scale": main_group.get('scale', 1.0),
+                "palette": main_group.get('palette', 0),
+            }
+        }
+    
+    @app.post("/api/pi/sync")
+    def api_sync_from_pi():
+        """Receive sync data from another Pi"""
+        data = request.get_json(force=True)
+        
+        source_device = data.get('device_name', 'Unknown')
+        app.logger.info(f"Receiving sync from {source_device}")
+        
+        # Extract sync data
+        sync_settings = data.get('settings', {})
+        sync_animation = data.get('animation', {})
+        
+        # Apply global settings if provided
+        if sync_settings:
+            new_settings = {}
+            if 'global_brightness' in sync_settings:
+                new_settings['global_brightness'] = sync_settings['global_brightness']
+            if 'global_color_temp' in sync_settings:
+                new_settings['global_color_temp'] = sync_settings['global_color_temp']
+            if 'global_saturation' in sync_settings:
+                new_settings['global_saturation'] = sync_settings['global_saturation']
+            if 'on' in sync_settings:
+                new_settings['on'] = sync_settings['on']
+            
+            if new_settings:
+                controller.update_settings(new_settings)
+        
+        # Apply animation settings if provided
+        if sync_animation:
+            current_settings = controller.get_settings()
+            groups = current_settings.get('groups', {})
+            main_group_key = 'main' if 'main' in groups else next(iter(groups.keys()), None)
+            
+            if main_group_key:
+                new_group_settings = {}
+                if 'function' in sync_animation:
+                    new_group_settings['function'] = sync_animation['function']
+                if 'speed' in sync_animation:
+                    new_group_settings['speed'] = sync_animation['speed']
+                if 'scale' in sync_animation:
+                    new_group_settings['scale'] = sync_animation['scale']
+                if 'palette' in sync_animation:
+                    new_group_settings['palette'] = sync_animation['palette']
+                
+                if new_group_settings:
+                    controller.update_group(main_group_key, new_group_settings)
+        
+        app.logger.info(f"Sync from {source_device} applied successfully")
+        return {"status": "ok", "message": "Sync applied"}
+    
+    @app.get("/api/pi/discover")
+    def api_get_discovered_pis():
+        """Get list of all discovered Pis on the network"""
+        if not discovery_service:
+            return {"devices": []}
+        
+        devices = discovery_service.get_devices()
+        return {
+            "devices": [pi.to_dict() for pi in devices],
+            "count": len(devices)
+        }
+    
+    @app.post("/api/pi/settings")
+    def api_update_pi_settings():
+        """Update Pi discovery settings (device name, group, master mode)"""
+        nonlocal pi_device_name, pi_group, pi_master_mode
+        
+        data = request.get_json(force=True)
+        
+        if 'device_name' in data:
+            pi_device_name = data['device_name']
+            settings['pi_device_name'] = pi_device_name
+        
+        if 'group' in data:
+            pi_group = data['group']
+            settings['pi_group'] = pi_group
+        
+        if 'master_mode' in data:
+            pi_master_mode = bool(data['master_mode'])
+            settings['pi_master_mode'] = pi_master_mode
+        
+        # Update discovery service with new info
+        if discovery_service:
+            discovery_service.update_device_info(
+                device_name=pi_device_name,
+                group=pi_group
+            )
+        
+        save_settings()
+        app.logger.info(f"Pi settings updated: {pi_device_name} / {pi_group} / Master: {pi_master_mode}")
+        
+        return {"status": "ok"}
+    
+    @app.get("/api/pi/settings")
+    def api_get_pi_settings():
+        """Get Pi discovery settings"""
+        return {
+            "device_name": pi_device_name,
+            "group": pi_group,
+            "master_mode": pi_master_mode,
+        }
+    
+    @app.post("/api/pi/sync-to")
+    def api_sync_to_pi():
+        """Send current state to another Pi"""
+        data = request.get_json(force=True)
+        target_url = data.get('url')
+        
+        if not target_url:
+            return {"status": "error", "message": "No target URL provided"}, 400
+        
+        # Get current state
+        current_state = api_get_pi_state()
+        
+        try:
+            # Send to target Pi
+            response = requests.post(
+                f"{target_url}/api/pi/sync",
+                json=current_state,
+                timeout=5
+            )
+            
+            if response.status_code == 200:
+                app.logger.info(f"Successfully synced to {target_url}")
+                return {"status": "ok", "message": "Sync sent successfully"}
+            else:
+                app.logger.error(f"Failed to sync to {target_url}: {response.status_code}")
+                return {"status": "error", "message": f"Target returned {response.status_code}"}, 500
+                
+        except requests.exceptions.RequestException as e:
+            app.logger.error(f"Failed to sync to {target_url}: {e}")
+            return {"status": "error", "message": str(e)}, 500
+    
+    @app.post("/api/pi/sync-all")
+    def api_sync_to_all():
+        """Send current state to all discovered Pis (or specific group)"""
+        data = request.get_json(force=True)
+        target_group = data.get('group', None)  # None = all groups
+        
+        if not discovery_service:
+            return {"status": "error", "message": "Discovery service not available"}, 500
+        
+        devices = discovery_service.get_devices()
+        
+        # Filter by group if specified
+        if target_group:
+            devices = [pi for pi in devices if pi.group == target_group]
+        
+        # Get current state
+        current_state = api_get_pi_state()
+        
+        success_count = 0
+        failed = []
+        
+        for pi in devices:
+            try:
+                response = requests.post(
+                    f"{pi.url}/api/pi/sync",
+                    json=current_state,
+                    timeout=5
+                )
+                
+                if response.status_code == 200:
+                    success_count += 1
+                    app.logger.info(f"Synced to {pi.device_name}")
+                else:
+                    failed.append(pi.device_name)
+                    app.logger.error(f"Failed to sync to {pi.device_name}: {response.status_code}")
+                    
+            except requests.exceptions.RequestException as e:
+                failed.append(pi.device_name)
+                app.logger.error(f"Failed to sync to {pi.device_name}: {e}")
+        
+        return {
+            "status": "ok",
+            "synced": success_count,
+            "failed": len(failed),
+            "failed_devices": failed,
+            "total": len(devices)
+        }
+    
     # WebSocket handlers for LED visualizer
     @socketio.on('connect', namespace='/visualizer')
     def visualizer_connect():
@@ -540,6 +810,29 @@ def create_app(led_count,
     @socketio.on('get_stats', namespace='/visualizer')
     def visualizer_get_stats():
         return visualizer.get_stats()
+    
+    # WebSocket handlers for Pi discovery
+    @socketio.on('connect', namespace='/discovery')
+    def discovery_connect():
+        """Send initial list of discovered Pis when client connects"""
+        if discovery_service:
+            devices = discovery_service.get_devices()
+            emit('devices_list', {
+                'devices': [pi.to_dict() for pi in devices]
+            })
+    
+    @socketio.on('disconnect', namespace='/discovery')
+    def discovery_disconnect():
+        pass
+    
+    @socketio.on('request_devices', namespace='/discovery')
+    def discovery_request_devices():
+        """Client can request updated device list"""
+        if discovery_service:
+            devices = discovery_service.get_devices()
+            emit('devices_list', {
+                'devices': [pi.to_dict() for pi in devices]
+            })
     
     # Store socketio instance in app for access from main
     app.socketio = socketio

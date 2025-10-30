@@ -22,6 +22,7 @@
   <link rel="stylesheet" href="static/css/modern.css">
   <link rel="stylesheet" href="static/css/components.css">
   <link rel="stylesheet" href="static/css/visualizer.css">
+  <link rel="stylesheet" href="static/css/discovery.css">
   
   <!-- Socket.IO for LED Visualizer -->
   <script src="https://cdn.socket.io/4.5.4/socket.io.min.js" crossorigin="anonymous"></script>
@@ -87,6 +88,16 @@
               <line x1="12" y1="17" x2="12" y2="21"></line>
             </svg>
             <span>Visualizer</span>
+          </router-link>
+          
+          <router-link to="/discovery" class="nav-link" active-class="nav-link-active">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+              <circle cx="9" cy="7" r="4"></circle>
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+              <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+            </svg>
+            <span>Discovery</span>
           </router-link>
           
           <router-link to="/setup" class="nav-link" active-class="nav-link-active">
