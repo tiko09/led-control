@@ -15,6 +15,7 @@ from ledcontrol.homekit import homekit_start
 from ledcontrol.artnet_server import ArtNetServer
 from ledcontrol.led_visualizer import LEDVisualizer
 from ledcontrol.pi_discovery import PiDiscoveryService
+from ledcontrol.version import get_version_string, get_version_info
 
 import ledcontrol.pixelmappings as pixelmappings
 import ledcontrol.animationfunctions as animfunctions
@@ -241,14 +242,17 @@ def create_app(led_count,
         # If device name is empty, use hostname
         device_name = pi_device_name or socket.gethostname()
         
-        app.logger.info(f"Starting Pi Discovery Service: {device_name} (port {port}, group: '{pi_group}')")
+        # Get Git version info
+        version_string = get_version_string()
+        
+        app.logger.info(f"Starting Pi Discovery Service: {device_name} (port {port}, group: '{pi_group}', version: {version_string})")
         
         try:
             discovery_service = PiDiscoveryService(
                 port=port,
                 device_name=device_name,
                 group=pi_group,
-                version='2.0.0',
+                version=version_string,
                 on_device_change=on_device_change
             )
             discovery_service.start()
@@ -386,6 +390,11 @@ def create_app(led_count,
     def get_fps():
         'Returns latest animation frames per second'
         return jsonify(fps=controller.get_frame_rate())
+    
+    @app.get('/getversion')
+    def get_version():
+        'Returns Git version information'
+        return jsonify(get_version_info())
 
     @app.get('/resettimer')
     def reset_timer():
@@ -590,13 +599,19 @@ def create_app(led_count,
         """Get information about this Pi"""
         import socket
         hostname = socket.gethostname()
+        version_info = get_version_info()
         
         return {
             "device_name": pi_device_name or hostname,
             "hostname": hostname,
             "group": pi_group,
             "master_mode": pi_master_mode,
-            "version": "2.0.0",
+            "version": version_info['version_string'],
+            "version_details": {
+                "commit": version_info['commit'],
+                "branch": version_info['branch'],
+                "tag": version_info['tag'],
+            },
             "led_count": led_count,
         }
     
