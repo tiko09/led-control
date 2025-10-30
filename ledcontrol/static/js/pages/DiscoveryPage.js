@@ -13,6 +13,7 @@ export default {
       },
       selectedGroup: 'all',
       syncing: false,
+      updating: {}, // Track which devices are updating { hostname: true/false }
       socket: null,
     }
   },
@@ -36,6 +37,11 @@ export default {
     },
     offlineDevices() {
       return this.filteredDevices.filter(d => !d.online);
+    },
+    devicesNeedingUpdate() {
+      // Compare version strings to find devices with different versions
+      const localVersion = this.piSettings.version || '';
+      return this.onlineDevices.filter(d => d.version !== localVersion);
     }
   },
   methods: {
@@ -126,6 +132,127 @@ export default {
         alert(`Failed to sync: ${e.message}`);
       }
       this.syncing = false;
+    },
+    async updatePi(device, restart = false) {
+      const action = restart ? 'update and restart' : 'update';
+      if (!confirm(`${action} ${device.device_name || device.hostname}?`)) {
+        return;
+      }
+      
+      this.$set(this.updating, device.hostname, true);
+      try {
+        const response = await fetch('/api/pi/update-remote', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            url: device.url,
+            restart: restart
+          })
+        });
+        
+        if (response.ok) {
+          const result = await response.json();
+          if (result.success) {
+            let msg = `Successfully updated ${device.device_name}\n`;
+            msg += `Version: ${result.old_version} → ${result.new_version}\n`;
+            if (result.changes && result.changes.length > 0) {
+              msg += `\nChanges:\n${result.changes.join('\n')}`;
+            }
+            if (restart) {
+              msg += '\n\nDevice is restarting...';
+            }
+            alert(msg);
+          } else {
+            alert(`Update failed: ${result.message}`);
+          }
+        } else {
+          const error = await response.json();
+          alert(`Failed to update: ${error.message}`);
+        }
+      } catch (e) {
+        alert(`Failed to update: ${e.message}`);
+      }
+      this.$set(this.updating, device.hostname, false);
+    },
+    async updateAllPis(restart = false) {
+      const targetGroup = this.selectedGroup === 'all' ? null : this.selectedGroup;
+      const groupText = targetGroup ? ` in group "${targetGroup}"` : '';
+      const action = restart ? 'update and restart' : 'update';
+      
+      if (!confirm(`${action} all Pis${groupText}?`)) {
+        return;
+      }
+      
+      this.syncing = true;
+      let succeeded = 0;
+      let failed = 0;
+      const results = [];
+      
+      for (const device of this.onlineDevices) {
+        this.$set(this.updating, device.hostname, true);
+        try {
+          const response = await fetch('/api/pi/update-remote', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+              url: device.url,
+              restart: restart
+            })
+          });
+          
+          if (response.ok) {
+            const result = await response.json();
+            if (result.success) {
+              succeeded++;
+              results.push(`✓ ${device.device_name}: ${result.old_version} → ${result.new_version}`);
+            } else {
+              failed++;
+              results.push(`✗ ${device.device_name}: ${result.message}`);
+            }
+          } else {
+            failed++;
+            results.push(`✗ ${device.device_name}: HTTP ${response.status}`);
+          }
+        } catch (e) {
+          failed++;
+          results.push(`✗ ${device.device_name}: ${e.message}`);
+        }
+        this.$set(this.updating, device.hostname, false);
+      }
+      
+      this.syncing = false;
+      
+      let msg = `Update Complete\n\nSucceeded: ${succeeded}\nFailed: ${failed}\n\n`;
+      msg += results.join('\n');
+      alert(msg);
+    },
+    async restartPi(device) {
+      if (!confirm(`Restart ${device.device_name || device.hostname}?`)) {
+        return;
+      }
+      
+      this.$set(this.updating, device.hostname, true);
+      try {
+        const response = await fetch('/api/pi/restart-remote', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: device.url })
+        });
+        
+        if (response.ok) {
+          alert(`${device.device_name} is restarting...`);
+        } else {
+          const error = await response.json();
+          alert(`Failed to restart: ${error.message}`);
+        }
+      } catch (e) {
+        alert(`Failed to restart: ${e.message}`);
+      }
+      this.$set(this.updating, device.hostname, false);
+    },
+    needsUpdate(device) {
+      const localVersion = this.piSettings.version || '';
+      return device.version !== localVersion;
     },
     jumpToPi(device) {
       window.open(device.url, '_blank');
@@ -237,14 +364,30 @@ export default {
           </option>
         </select>
       </div>
-      <button 
-        @click="syncToAll" 
-        :disabled="syncing || onlineDevices.length === 0"
-        class="btn btn-primary"
-      >
-        <span v-if="syncing">Syncing...</span>
-        <span v-else>Sync to All ({{ onlineDevices.length }})</span>
-      </button>
+      <div class="button-group">
+        <button 
+          @click="syncToAll" 
+          :disabled="syncing || onlineDevices.length === 0"
+          class="btn btn-primary"
+        >
+          <span v-if="syncing">Syncing...</span>
+          <span v-else>Sync to All ({{ onlineDevices.length }})</span>
+        </button>
+        <button 
+          @click="updateAllPis(false)" 
+          :disabled="syncing || onlineDevices.length === 0"
+          class="btn btn-warning"
+        >
+          Update All ({{ onlineDevices.length }})
+        </button>
+        <button 
+          @click="updateAllPis(true)" 
+          :disabled="syncing || onlineDevices.length === 0"
+          class="btn btn-warning"
+        >
+          Update All & Restart
+        </button>
+      </div>
     </div>
   </div>
   
@@ -266,7 +409,15 @@ export default {
       >
         <div class="pi-header">
           <h3>{{ device.device_name || device.hostname }}</h3>
-          <span class="status-badge online">● Online</span>
+          <div class="header-badges">
+            <span class="status-badge online">● Online</span>
+            <span v-if="needsUpdate(device)" class="status-badge update-available">
+              Update Available
+            </span>
+            <span v-if="updating[device.hostname]" class="status-badge updating">
+              ⟳ Updating...
+            </span>
+          </div>
         </div>
         
         <div class="pi-info">
@@ -284,7 +435,9 @@ export default {
           </div>
           <div class="info-row">
             <span class="label">Version:</span>
-            <span class="value">{{ device.version }}</span>
+            <span class="value" :class="{ 'version-outdated': needsUpdate(device) }">
+              {{ device.version }}
+            </span>
           </div>
         </div>
         
@@ -294,10 +447,31 @@ export default {
           </button>
           <button 
             @click="syncTo(device)" 
-            :disabled="syncing"
+            :disabled="syncing || updating[device.hostname]"
             class="btn btn-primary"
           >
-            Sync to This Pi
+            Sync Settings
+          </button>
+          <button 
+            @click="updatePi(device, false)" 
+            :disabled="updating[device.hostname]"
+            class="btn btn-warning"
+          >
+            Update
+          </button>
+          <button 
+            @click="updatePi(device, true)" 
+            :disabled="updating[device.hostname]"
+            class="btn btn-warning"
+          >
+            Update & Restart
+          </button>
+          <button 
+            @click="restartPi(device)" 
+            :disabled="updating[device.hostname]"
+            class="btn btn-danger"
+          >
+            Restart
           </button>
         </div>
       </div>

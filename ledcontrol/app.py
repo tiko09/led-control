@@ -5,6 +5,11 @@ import json
 import atexit
 import shutil
 import traceback
+import subprocess
+import sys
+import os
+import time
+import threading
 from threading import Timer
 from pathlib import Path
 from flask import Flask, render_template, request, jsonify
@@ -833,6 +838,197 @@ def create_app(led_count,
             "failed_devices": failed,
             "total": len(devices)
         }
+    
+    @app.post("/api/pi/update")
+    def api_update_self():
+        """Update this Pi from git and optionally restart"""
+        data = request.get_json(force=True)
+        restart = data.get('restart', False)
+        
+        result = {
+            'old_version': get_version_string(),
+            'success': False,
+            'output': '',
+            'new_version': None,
+            'changes': []
+        }
+        
+        try:
+            # Get current working directory (where the repo is)
+            repo_path = Path(__file__).parent.parent
+            
+            # Check for uncommitted changes
+            status_result = subprocess.run(
+                ['git', 'status', '--porcelain'],
+                cwd=repo_path,
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            
+            if status_result.stdout.strip():
+                result['output'] = 'Warning: Uncommitted changes detected\n'
+            
+            # Fetch latest changes
+            fetch_result = subprocess.run(
+                ['git', 'fetch', 'origin', 'master'],
+                cwd=repo_path,
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            result['output'] += fetch_result.stdout + fetch_result.stderr
+            
+            # Check what would change
+            diff_result = subprocess.run(
+                ['git', 'log', 'HEAD..origin/master', '--oneline'],
+                cwd=repo_path,
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            
+            if diff_result.stdout.strip():
+                result['changes'] = diff_result.stdout.strip().split('\n')
+                result['output'] += f'\nChanges to be pulled:\n{diff_result.stdout}'
+            else:
+                result['output'] += '\nAlready up to date.\n'
+                result['success'] = True
+                result['new_version'] = get_version_string()
+                return result
+            
+            # Git pull
+            pull_result = subprocess.run(
+                ['git', 'pull', 'origin', 'master'],
+                cwd=repo_path,
+                capture_output=True,
+                text=True,
+                timeout=60
+            )
+            result['output'] += '\n' + pull_result.stdout + pull_result.stderr
+            
+            if pull_result.returncode != 0:
+                result['output'] += f'\nGit pull failed with code {pull_result.returncode}'
+                return result, 500
+            
+            # Reinstall in develop mode (as current user, not root)
+            install_result = subprocess.run(
+                [sys.executable, 'setup.py', 'develop'],
+                cwd=repo_path,
+                capture_output=True,
+                text=True,
+                timeout=120
+            )
+            result['output'] += '\nSetup output:\n' + install_result.stdout
+            
+            if install_result.returncode != 0:
+                result['output'] += f'\nSetup failed: {install_result.stderr}'
+                # Continue anyway - might still work
+            
+            # Reload version module to get new version
+            import importlib
+            import ledcontrol.version as version_module
+            importlib.reload(version_module)
+            result['new_version'] = version_module.get_version_string()
+            result['success'] = True
+            
+            app.logger.info(f"Update successful: {result['old_version']} → {result['new_version']}")
+            
+            if restart:
+                result['output'] += '\nRestarting in 2 seconds...'
+                app.logger.info("Restart requested, will restart after response")
+                
+                def restart_server():
+                    time.sleep(2)
+                    app.logger.info("Restarting now...")
+                    os.execv(sys.executable, [sys.executable] + sys.argv)
+                
+                threading.Thread(target=restart_server, daemon=True).start()
+            
+            return result
+            
+        except subprocess.TimeoutExpired:
+            result['output'] += '\nError: Command timed out'
+            return result, 500
+        except Exception as e:
+            result['output'] += f'\nError: {str(e)}\n{traceback.format_exc()}'
+            app.logger.error(f"Update failed: {e}")
+            return result, 500
+    
+    @app.post("/api/pi/update-remote")
+    def api_update_remote_pi():
+        """Trigger update on another Pi"""
+        data = request.get_json(force=True)
+        target_url = data.get('url')
+        restart = data.get('restart', False)
+        
+        if not target_url:
+            return {"status": "error", "message": "No target URL provided"}, 400
+        
+        try:
+            app.logger.info(f"Triggering update on {target_url}")
+            response = requests.post(
+                f"{target_url}/api/pi/update",
+                json={'restart': restart},
+                timeout=180  # 3 minutes for update process
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                app.logger.info(f"Update on {target_url} successful")
+                return result
+            else:
+                app.logger.error(f"Update on {target_url} failed: {response.status_code}")
+                return {
+                    "success": False,
+                    "error": f"Remote returned {response.status_code}",
+                    "output": response.text
+                }, response.status_code
+                
+        except requests.exceptions.Timeout:
+            return {"success": False, "error": "Request timed out"}, 504
+        except requests.exceptions.RequestException as e:
+            app.logger.error(f"Failed to update {target_url}: {e}")
+            return {"success": False, "error": str(e)}, 500
+    
+    @app.post("/api/pi/restart")
+    def api_restart_self():
+        """Restart this Pi's ledcontrol service"""
+        try:
+            app.logger.info("Restart requested")
+            
+            def restart_server():
+                time.sleep(1)
+                app.logger.info("Restarting now...")
+                os.execv(sys.executable, [sys.executable] + sys.argv)
+            
+            threading.Thread(target=restart_server, daemon=True).start()
+            
+            return {
+                "success": True,
+                "message": "Restarting in 1 second..."
+            }
+        except Exception as e:
+            app.logger.error(f"Restart failed: {e}")
+            return {"success": False, "error": str(e)}, 500
+    
+    @app.post("/api/pi/restart-remote")
+    def api_restart_remote_pi():
+        """Trigger restart on another Pi"""
+        data = request.get_json(force=True)
+        target_url = data.get('url')
+        
+        if not target_url:
+            return {"status": "error", "message": "No target URL provided"}, 400
+        
+        try:
+            response = requests.post(
+                f"{target_url}/api/pi/restart",
+                timeout=10
+            )
+            return response.json()
+        except Exception as e:
+            return {"success": False, "error": str(e)}, 500
     
     # WebSocket handlers for LED visualizer
     @socketio.on('connect', namespace='/visualizer')
