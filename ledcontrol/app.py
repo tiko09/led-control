@@ -644,52 +644,64 @@ def create_app(led_count,
     @app.post("/api/pi/sync")
     def api_sync_from_pi():
         """Receive sync data from another Pi"""
-        data = request.get_json(force=True)
-        
-        source_device = data.get('device_name', 'Unknown')
-        app.logger.info(f"Receiving sync from {source_device}")
-        
-        # Extract sync data
-        sync_settings = data.get('settings', {})
-        sync_animation = data.get('animation', {})
-        
-        # Apply global settings if provided
-        if sync_settings:
-            new_settings = {}
-            if 'global_brightness' in sync_settings:
-                new_settings['global_brightness'] = sync_settings['global_brightness']
-            if 'global_color_temp' in sync_settings:
-                new_settings['global_color_temp'] = sync_settings['global_color_temp']
-            if 'global_saturation' in sync_settings:
-                new_settings['global_saturation'] = sync_settings['global_saturation']
-            if 'on' in sync_settings:
-                new_settings['on'] = sync_settings['on']
+        try:
+            data = request.get_json(force=True)
             
-            if new_settings:
-                controller.update_settings(new_settings)
-        
-        # Apply animation settings if provided
-        if sync_animation:
-            current_settings = controller.get_settings()
-            groups = current_settings.get('groups', {})
-            main_group_key = 'main' if 'main' in groups else next(iter(groups.keys()), None)
+            source_device = data.get('device_name', 'Unknown')
+            app.logger.info(f"Receiving sync from {source_device}")
             
-            if main_group_key:
-                new_group_settings = {}
-                if 'function' in sync_animation:
-                    new_group_settings['function'] = sync_animation['function']
-                if 'speed' in sync_animation:
-                    new_group_settings['speed'] = sync_animation['speed']
-                if 'scale' in sync_animation:
-                    new_group_settings['scale'] = sync_animation['scale']
-                if 'palette' in sync_animation:
-                    new_group_settings['palette'] = sync_animation['palette']
+            # Extract sync data
+            sync_settings = data.get('settings', {})
+            sync_animation = data.get('animation', {})
+            
+            # Apply global settings if provided
+            if sync_settings:
+                new_settings = {}
+                if 'global_brightness' in sync_settings:
+                    new_settings['global_brightness'] = sync_settings['global_brightness']
+                if 'global_color_temp' in sync_settings:
+                    new_settings['global_color_temp'] = sync_settings['global_color_temp']
+                if 'global_saturation' in sync_settings:
+                    new_settings['global_saturation'] = sync_settings['global_saturation']
+                if 'on' in sync_settings:
+                    new_settings['on'] = sync_settings['on']
                 
-                if new_group_settings:
-                    controller.update_group(main_group_key, new_group_settings)
-        
-        app.logger.info(f"Sync from {source_device} applied successfully")
-        return {"status": "ok", "message": "Sync applied"}
+                if new_settings:
+                    controller.update_settings(new_settings)
+            
+            # Apply animation settings if provided
+            if sync_animation:
+                current_settings = controller.get_settings()
+                groups = current_settings.get('groups', {})
+                main_group_key = 'main' if 'main' in groups else next(iter(groups.keys()), None)
+                
+                if main_group_key:
+                    new_group_settings = {}
+                    if 'function' in sync_animation:
+                        new_group_settings['function'] = sync_animation['function']
+                    if 'speed' in sync_animation:
+                        new_group_settings['speed'] = sync_animation['speed']
+                    if 'scale' in sync_animation:
+                        new_group_settings['scale'] = sync_animation['scale']
+                    if 'palette' in sync_animation:
+                        new_group_settings['palette'] = sync_animation['palette']
+                    
+                    if new_group_settings:
+                        # Update via settings dict (controller.update_settings works recursively)
+                        controller.update_settings({
+                            'groups': {
+                                main_group_key: new_group_settings
+                            }
+                        })
+            
+            app.logger.info(f"Sync from {source_device} applied successfully")
+            return {"status": "ok", "message": "Sync applied"}
+            
+        except Exception as e:
+            app.logger.error(f"Failed to apply sync: {e}")
+            import traceback
+            app.logger.error(traceback.format_exc())
+            return {"status": "error", "message": str(e)}, 500
     
     @app.get("/api/pi/discover")
     def api_get_discovered_pis():
