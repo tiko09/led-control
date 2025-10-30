@@ -14,6 +14,10 @@ export default {
       selectedGroup: 'all',
       syncing: false,
       updating: {}, // Track which devices are updating { hostname: true/false }
+      updatingThis: false, // Track if this Pi is updating
+      thisUpdateAvailable: false,
+      thisCommitsBehind: 0,
+      thisUpdateChanges: [],
       socket: null,
     }
   },
@@ -50,10 +54,88 @@ export default {
         const response = await fetch('/api/pi/settings');
         if (response.ok) {
           this.piSettings = await response.json();
+          // Check for updates after loading settings
+          this.checkThisForUpdates();
         }
       } catch (e) {
         console.error('Failed to load Pi settings:', e);
       }
+    },
+    async checkThisForUpdates() {
+      try {
+        const response = await fetch('/api/pi/check-updates');
+        if (response.ok) {
+          const data = await response.json();
+          this.thisUpdateAvailable = data.available || false;
+          this.thisCommitsBehind = data.commits_behind || 0;
+          this.thisUpdateChanges = data.changes || [];
+        }
+      } catch (e) {
+        console.error('Failed to check updates:', e);
+      }
+    },
+    async updateThis(restart = false) {
+      const action = restart ? 'update and restart' : 'update';
+      if (!confirm(`${action} this Pi?\n\n${this.thisCommitsBehind} commits behind`)) {
+        return;
+      }
+      
+      this.updatingThis = true;
+      try {
+        const response = await fetch('/api/pi/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ restart: restart })
+        });
+        
+        if (response.ok) {
+          const result = await response.json();
+          if (result.success) {
+            let msg = `Successfully updated this Pi\n`;
+            msg += `Version: ${result.old_version} → ${result.new_version}\n`;
+            if (result.changes && result.changes.length > 0) {
+              msg += `\nChanges:\n${result.changes.join('\n')}`;
+            }
+            if (restart) {
+              msg += '\n\nThis Pi is restarting...';
+            }
+            alert(msg);
+            // Refresh update status
+            this.checkThisForUpdates();
+          } else {
+            alert(`Update failed: ${result.message || result.output}`);
+          }
+        } else {
+          const error = await response.json();
+          alert(`Failed to update: ${error.message}`);
+        }
+      } catch (e) {
+        alert(`Failed to update: ${e.message}`);
+      }
+      this.updatingThis = false;
+    },
+    async restartThis() {
+      if (!confirm(`Restart this Pi?`)) {
+        return;
+      }
+      
+      this.updatingThis = true;
+      try {
+        const response = await fetch('/api/pi/restart', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        
+        if (response.ok) {
+          alert(`This Pi is restarting...`);
+        } else {
+          const error = await response.json();
+          alert(`Failed to restart: ${error.message}`);
+        }
+      } catch (e) {
+        alert(`Failed to restart: ${e.message}`);
+      }
+      this.updatingThis = false;
     },
     async savePiSettings() {
       try {
@@ -350,6 +432,60 @@ export default {
         Master Mode (auto-sync to other Pis)
       </label>
       <p class="help-text">When enabled, changes will automatically sync to all Pis in the same group</p>
+    </div>
+    
+    <!-- Update This Pi Section -->
+    <div class="this-pi-update-section">
+      <h3>Software Updates</h3>
+      <div class="update-info">
+        <span v-if="thisUpdateAvailable" class="status-badge update-available">
+          {{ thisCommitsBehind }} Update(s) Available
+        </span>
+        <span v-else class="status-badge online">
+          ✓ Up to Date
+        </span>
+        <span v-if="updatingThis" class="status-badge updating">
+          ⟳ Updating...
+        </span>
+      </div>
+      <div class="button-group" style="margin-top: 0.5rem;">
+        <button 
+          @click="checkThisForUpdates()" 
+          :disabled="updatingThis"
+          class="btn btn-secondary"
+        >
+          Check for Updates
+        </button>
+        <button 
+          @click="updateThis(false)" 
+          :disabled="updatingThis || !thisUpdateAvailable"
+          class="btn btn-warning"
+        >
+          Update This Pi
+        </button>
+        <button 
+          @click="updateThis(true)" 
+          :disabled="updatingThis || !thisUpdateAvailable"
+          class="btn btn-warning"
+        >
+          Update & Restart
+        </button>
+        <button 
+          @click="restartThis()" 
+          :disabled="updatingThis"
+          class="btn btn-danger"
+        >
+          Restart This Pi
+        </button>
+      </div>
+      <div v-if="thisUpdateChanges.length > 0" class="update-changes">
+        <p class="help-text">Recent changes:</p>
+        <ul>
+          <li v-for="change in thisUpdateChanges.slice(0, 5)" :key="change">
+            {{ change }}
+          </li>
+        </ul>
+      </div>
     </div>
   </div>
   

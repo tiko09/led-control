@@ -800,4 +800,35 @@ option:hover, option:active {
   margin-bottom: 0;
 }
 
+.this-pi-update-section {
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid #e6e8ec;
+}
+.this-pi-update-section h3 {
+  margin: 0 0 0.5rem 0;
+  font-size: 1rem;
+}
+.this-pi-update-section .update-info {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+.this-pi-update-section .update-changes {
+  margin-top: 0.75rem;
+  padding: 0.5rem;
+  background: rgba(52, 54, 57, 0.3);
+  border-radius: 3px;
+}
+.this-pi-update-section .update-changes ul {
+  margin: 0.3rem 0 0 0;
+  padding-left: 1.5rem;
+  font-size: 0.85rem;
+  color: #afb1b5;
+}
+.this-pi-update-section .update-changes ul li {
+  margin-bottom: 0.2rem;
+}
+
 /*# sourceMappingURL=index.css.map */

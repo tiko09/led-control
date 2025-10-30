@@ -839,6 +839,70 @@ def create_app(led_count,
             "total": len(devices)
         }
     
+    @app.get("/api/pi/check-updates")
+    def api_check_updates():
+        """Check if updates are available from GitHub"""
+        try:
+            repo_path = Path(__file__).parent.parent
+            
+            # Fetch from origin
+            fetch_result = subprocess.run(
+                ['git', 'fetch', 'origin', 'master'],
+                cwd=repo_path,
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            
+            if fetch_result.returncode != 0:
+                return {
+                    'available': False,
+                    'error': f'Git fetch failed: {fetch_result.stderr}',
+                    'commits_behind': 0
+                }
+            
+            # Check how many commits behind we are
+            rev_count = subprocess.run(
+                ['git', 'rev-list', '--count', 'HEAD..origin/master'],
+                cwd=repo_path,
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            
+            commits_behind = int(rev_count.stdout.strip()) if rev_count.returncode == 0 else 0
+            
+            if commits_behind > 0:
+                # Get list of commits
+                log_result = subprocess.run(
+                    ['git', 'log', '--oneline', 'HEAD..origin/master'],
+                    cwd=repo_path,
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
+                
+                changes = [line.strip() for line in log_result.stdout.strip().split('\n') if line.strip()]
+                
+                return {
+                    'available': True,
+                    'commits_behind': commits_behind,
+                    'changes': changes,
+                    'current_version': get_version_string()
+                }
+            else:
+                return {
+                    'available': False,
+                    'commits_behind': 0,
+                    'current_version': get_version_string()
+                }
+                
+        except subprocess.TimeoutExpired:
+            return {'available': False, 'error': 'Git fetch timeout', 'commits_behind': 0}
+        except Exception as e:
+            app.logger.error(f'Error checking updates: {e}')
+            return {'available': False, 'error': str(e), 'commits_behind': 0}
+    
     @app.post("/api/pi/update")
     def api_update_self():
         """Update this Pi from git and optionally restart"""
@@ -1011,6 +1075,27 @@ def create_app(led_count,
         except Exception as e:
             app.logger.error(f"Restart failed: {e}")
             return {"success": False, "error": str(e)}, 500
+    
+    @app.post("/api/pi/check-updates-remote")
+    def api_check_updates_remote():
+        """Check for updates on a remote Pi"""
+        data = request.get_json(force=True)
+        url = data.get('url')
+        
+        if not url:
+            return {"error": "URL is required"}, 400
+        
+        try:
+            response = requests.get(
+                f"{url}/api/pi/check-updates",
+                timeout=30
+            )
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.Timeout:
+            return {"error": "Request timed out", "available": False, "commits_behind": 0}, 504
+        except requests.exceptions.RequestException as e:
+            return {"error": str(e), "available": False, "commits_behind": 0}, 500
     
     @app.post("/api/pi/restart-remote")
     def api_restart_remote_pi():
