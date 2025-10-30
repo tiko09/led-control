@@ -50,7 +50,8 @@ def main():
                      args.save_interval,
                      args.hap,
                      args.no_timer_reset,
-                     args.dev)
+                     args.dev,
+                     args.port)
 
     if args.dev:
         # Development mode: use Flask-SocketIO's built-in server

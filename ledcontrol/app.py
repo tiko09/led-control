@@ -37,7 +37,8 @@ def create_app(led_count,
                save_interval,
                enable_hap,
                no_timer_reset,
-               dev):
+               dev,
+               port=80):
     app = Flask(__name__)
     app.config['SECRET_KEY'] = 'led-control-secret-key-change-in-production'
     
@@ -234,18 +235,27 @@ def create_app(led_count,
         if discovery_service:
             discovery_service.stop()
         
-        # Get port from Flask app (default to 80)
-        import os
-        port = int(os.environ.get('PORT', 80))
+        # Get port from create_app parameter
+        import socket
         
-        discovery_service = PiDiscoveryService(
-            port=port,
-            device_name=pi_device_name,
-            group=pi_group,
-            version='2.0.0',
-            on_device_change=on_device_change
-        )
-        discovery_service.start()
+        # If device name is empty, use hostname
+        device_name = pi_device_name or socket.gethostname()
+        
+        app.logger.info(f"Starting Pi Discovery Service: {device_name} (port {port}, group: '{pi_group}')")
+        
+        try:
+            discovery_service = PiDiscoveryService(
+                port=port,
+                device_name=device_name,
+                group=pi_group,
+                version='2.0.0',
+                on_device_change=on_device_change
+            )
+            discovery_service.start()
+            app.logger.info("Pi Discovery Service started successfully")
+        except Exception as e:
+            app.logger.error(f"Failed to start Pi Discovery Service: {e}", exc_info=True)
+            discovery_service = None
     
     # Start discovery service
     start_discovery_service()
