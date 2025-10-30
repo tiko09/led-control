@@ -3,7 +3,9 @@
 
 # Check if we should use eventlet and monkey patch BEFORE any other imports
 import sys
-_use_eventlet = '--dev' not in sys.argv
+import os
+# Check for --dev flag in argv or DEV environment variable
+_use_eventlet = '--dev' not in sys.argv and os.environ.get('LEDCONTROL_DEV') != '1'
 
 if _use_eventlet:
     try:
@@ -50,6 +52,9 @@ def main():
                         help='Development flag. Default: False')
     args = parser.parse_args()
 
+    # Debug: Print dev flag status
+    print(f"DEBUG: args.dev = {args.dev}, sys.argv = {sys.argv}")
+
     app = create_app(args.led_count,
                      args.config_file,
                      args.pixel_mapping_json,
@@ -68,11 +73,13 @@ def main():
     if args.dev:
         # Development mode: use Flask-SocketIO's built-in server
         # Disable auto-reload to prevent settings loss and animation interruption
+        print("Running in DEVELOPMENT mode (--dev flag detected)")
         app.socketio.run(app, host=args.host, port=args.port, debug=True, use_reloader=False)
     else:
         # Production mode: Try to use eventlet or gevent for WebSocket support
         # Fall back to bjoern if neither is available (but WebSockets won't work)
         # Note: eventlet.monkey_patch() was already called at module import time
+        print("Running in PRODUCTION mode")
         try:
             # Try eventlet first (recommended for Flask-SocketIO)
             import eventlet
