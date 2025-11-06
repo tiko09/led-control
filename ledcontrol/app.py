@@ -155,6 +155,9 @@ def create_app(led_count,
 
             # Enforce calibration off when starting up
             settings['settings']['calibration'] = 0
+            
+            # Add app-level settings to controller settings
+            settings['settings']['use_white_channel'] = settings.get('use_white_channel', True)
 
             # Set controller settings, (automatically) recalculate things that depend on them
             controller.update_settings(settings['settings'])
@@ -319,12 +322,26 @@ def create_app(led_count,
     @app.get('/getsettings')
     def get_settings():
         'Get settings'
-        return jsonify(controller.get_settings())
+        controller_settings = controller.get_settings()
+        # Add app-level settings that frontend needs
+        controller_settings['use_white_channel'] = settings.get('use_white_channel', True)
+        controller_settings['led_strip_type'] = settings.get('led_strip_type', led_pixel_order)
+        return jsonify(controller_settings)
 
     @app.post('/updatesettings')
     def update_settings():
         'Update settings'
         new_settings = request.json
+        
+        # Handle app-level settings
+        if 'use_white_channel' in new_settings:
+            settings['use_white_channel'] = new_settings['use_white_channel']
+            # Also update in controller settings so it's available during rendering
+            controller.update_settings({'use_white_channel': new_settings['use_white_channel']})
+        if 'led_strip_type' in new_settings:
+            settings['led_strip_type'] = new_settings.pop('led_strip_type')
+        
+        # Update controller settings with remaining values
         controller.update_settings(new_settings)
         return jsonify(result='')
 
