@@ -291,6 +291,10 @@ if pi_version == 5:
                 # Create Color object (will use all 4 channels for RGBW, ignore w for RGB)
                 self.strip.set_pixel_color(index, Color(r, g, b, w))
             
+            def setPixelsArray(self, start, rgbw_array):
+                """Set multiple pixels from NumPy array (batch operation for performance)"""
+                self.strip.set_pixels_array(start, rgbw_array)
+            
             def getPixelColor(self, index):
                 """Get pixel color as packed 32-bit RGBW value"""
                 # Note: rpi5-ws2812 doesn't support reading back pixel values
@@ -736,10 +740,16 @@ if pi_version == 5:
                 g = ((g.astype(np.uint16) * corr_rgb[1]) >> 8).astype(np.uint8)
                 b = ((b.astype(np.uint16) * corr_rgb[2]) >> 8).astype(np.uint8)
                 
-                # Batch set pixels
-                for i, (ri, gi, bi, wi) in enumerate(zip(r, g, b, w)):
-                    color = pack_rgbw(int(ri), int(gi), int(bi), int(wi))
-                    channel.setPixelColor(start + i, color)
+                # Batch set pixels using array method (FAST!)
+                try:
+                    # Stack RGBW into single array: (n, 4)
+                    rgbw_array = np.column_stack((r, g, b, w))
+                    channel.setPixelsArray(start, rgbw_array)
+                except AttributeError:
+                    # Fallback if setPixelsArray not available
+                    for i, (ri, gi, bi, wi) in enumerate(zip(r, g, b, w)):
+                        color = pack_rgbw(int(ri), int(gi), int(bi), int(wi))
+                        channel.setPixelColor(start + i, color)
                     
             except (ValueError, AttributeError, TypeError):
                 # Fall back to non-vectorized version
@@ -855,10 +865,16 @@ if pi_version == 5:
                 b8 = np.clip(b * brightness * 255 * corr_rgb[2] / 255, 0, 255).astype(np.uint8)
                 w8 = np.clip(w * brightness * 255, 0, 255).astype(np.uint8)
                 
-                # Batch set pixels
-                for i, (ri, gi, bi, wi) in enumerate(zip(r8, g8, b8, w8)):
-                    color = pack_rgbw(int(ri), int(gi), int(bi), int(wi))
-                    channel.setPixelColor(start + i, color)
+                # Batch set pixels using array method (FAST!)
+                try:
+                    # Stack RGBW into single array: (n, 4)
+                    rgbw_array = np.column_stack((r8, g8, b8, w8))
+                    channel.setPixelsArray(start, rgbw_array)
+                except AttributeError:
+                    # Fallback if setPixelsArray not available
+                    for i, (ri, gi, bi, wi) in enumerate(zip(r8, g8, b8, w8)):
+                        color = pack_rgbw(int(ri), int(gi), int(bi), int(wi))
+                        channel.setPixelColor(start + i, color)
                     
             except (ValueError, AttributeError, TypeError):
                 # Fall back to non-vectorized version
