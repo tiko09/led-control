@@ -22,11 +22,19 @@ from ledcontrol.animationcontroller import AnimationController
 def profile_animation(duration=10):
     """Profile an animation for the specified duration in seconds."""
     
-    # Load config
-    config_path = Path(__file__).parent / 'config.json'
-    if not config_path.exists():
-        print("ERROR: config.json not found")
+    # Load config - try different possible filenames
+    config_path = None
+    for filename in ['ledcontrol-dev.json', 'config.json', 'ledcontrol.json']:
+        path = Path(__file__).parent / filename
+        if path.exists():
+            config_path = path
+            break
+    
+    if not config_path:
+        print("ERROR: No config file found (tried ledcontrol-dev.json, config.json, ledcontrol.json)")
         return
+    
+    print(f"Using config: {config_path.name}\n")
     
     with open(config_path) as f:
         config = json.load(f)

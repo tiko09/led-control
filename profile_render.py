@@ -20,8 +20,20 @@ from ledcontrol.animationcontroller import AnimationController
 def profile_render_loop(num_frames=300):
     """Profile individual render operations."""
     
-    # Load config
-    config_path = Path(__file__).parent / 'config.json'
+    # Load config - try different possible filenames
+    config_path = None
+    for filename in ['ledcontrol-dev.json', 'config.json', 'ledcontrol.json']:
+        path = Path(__file__).parent / filename
+        if path.exists():
+            config_path = path
+            break
+    
+    if not config_path:
+        print("ERROR: No config file found (tried ledcontrol-dev.json, config.json, ledcontrol.json)")
+        return
+    
+    print(f"Using config: {config_path.name}\n")
+    
     with open(config_path) as f:
         config = json.load(f)
     
