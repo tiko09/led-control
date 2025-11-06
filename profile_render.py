@@ -103,19 +103,8 @@ def profile_render_loop(num_frames=300):
     # Timing storage
     timings = defaultdict(list)
     
-    # Monkey-patch methods to add timing
-    original_update_leds = animation_controller.update_leds
-    
-    def timed_update_leds():
-        t0 = time.perf_counter()
-        result = original_update_leds()
-        t1 = time.perf_counter()
-        timings['update_leds'].append(t1 - t0)
-        return result
-    
-    animation_controller.update_leds = timed_update_leds
-    
-    # Also patch the LED controller's show function
+    # We don't need to monkey-patch since we'll call update_leds directly
+    # Just patch show() to measure SPI transfer time
     if hasattr(led_controller, 'show'):
         original_show = led_controller.show
         
@@ -128,8 +117,10 @@ def profile_render_loop(num_frames=300):
         
         led_controller.show = timed_show
     
-    # Start the animation controller
-    animation_controller.start()
+    # Don't start the timer thread, we'll call update_leds manually
+    # Just initialize the timer values
+    animation_controller._start = time.perf_counter()
+    animation_controller._time = 0
     
     # Run frames manually by calling update_leds
     start_time = time.perf_counter()
@@ -137,6 +128,7 @@ def profile_render_loop(num_frames=300):
     for i in range(num_frames):
         frame_start = time.perf_counter()
         
+        # Call update_leds directly (without timer thread)
         animation_controller.update_leds()
         
         frame_end = time.perf_counter()
@@ -144,9 +136,6 @@ def profile_render_loop(num_frames=300):
         
         if (i + 1) % 100 == 0:
             print(f"  Rendered {i + 1}/{num_frames} frames...")
-    
-    # Stop the animation controller
-    animation_controller.stop()
     
     end_time = time.perf_counter()
     total_duration = end_time - start_time
@@ -165,7 +154,7 @@ def profile_render_loop(num_frames=300):
     print(f"{'Operation':<30} {'Avg (ms)':<12} {'Min (ms)':<12} {'Max (ms)':<12} {'Total %':<10}")
     print("-" * 80)
     
-    for key in ['total_frame', 'update_leds', 'show']:
+    for key in ['total_frame', 'show']:
         if key in timings and timings[key]:
             values = np.array(timings[key]) * 1000  # Convert to ms
             avg = np.mean(values)
@@ -177,6 +166,16 @@ def profile_render_loop(num_frames=300):
             print(f"{key:<30} {avg:>10.3f}  {min_val:>10.3f}  {max_val:>10.3f}  {percentage:>8.1f}%")
     
     print("-" * 80)
+    
+    # Calculate time NOT in show() - this is the Python overhead
+    if 'total_frame' in timings and 'show' in timings:
+        total_frame_time = np.mean(timings['total_frame']) * 1000
+        show_time = np.mean(timings['show']) * 1000
+        overhead_time = total_frame_time - show_time
+        overhead_pct = (overhead_time / total_frame_time) * 100
+        
+        print(f"{'Python overhead (not in show)':<30} {overhead_time:>10.3f}  {'':>10}  {'':>10}  {overhead_pct:>8.1f}%")
+        print("-" * 80)
     
     # Calculate overhead
     if 'total_frame' in timings and timings['total_frame']:
@@ -196,35 +195,40 @@ def profile_render_loop(num_frames=300):
     print("BOTTLENECK ANALYSIS")
     print("="*80 + "\n")
     
-    max_time = 0
-    bottleneck = None
-    
-    for key in ['update_leds', 'show']:
-        if key in timings and timings[key]:
-            avg_time = np.mean(timings[key]) * 1000
-            if avg_time > max_time:
-                max_time = avg_time
-                bottleneck = key
-    
-    if bottleneck:
-        print(f"Primary bottleneck: {bottleneck} ({max_time:.3f} ms per frame)")
+    if 'show' in timings and 'total_frame' in timings:
+        show_time = np.mean(timings['show']) * 1000
+        total_time = np.mean(timings['total_frame']) * 1000
+        overhead_time = total_time - show_time
         
-        if bottleneck == 'show':
-            print("\nThe 'show()' function (SPI transfer) is the bottleneck.")
-            print("This is hardware-limited and cannot be optimized further in Python.")
-            print("Possible solutions:")
-            print("  - Reduce frame rate")
-            print("  - Reduce LED count")
-            print("  - Use hardware DMA (requires C implementation)")
+        show_pct = (show_time / total_time) * 100
+        overhead_pct = (overhead_time / total_time) * 100
         
-        elif bottleneck == 'update_leds':
-            print(f"\nThe '{bottleneck}' function is the bottleneck.")
-            print("This includes animation calculation and rendering.")
-            print("Possible solutions:")
-            print("  - Implement render functions in Cython (50-100x faster)")
+        print(f"Per-frame breakdown:")
+        print(f"  Total frame time:    {total_time:.3f} ms (100%)")
+        print(f"  SPI transfer (show): {show_time:.3f} ms ({show_pct:.1f}%)")
+        print(f"  Python overhead:     {overhead_time:.3f} ms ({overhead_pct:.1f}%)")
+        print()
+        
+        if show_pct > 60:
+            print("PRIMARY BOTTLENECK: SPI transfer (show)")
+            print("The hardware SPI transfer is taking most of the time.")
+            print("This is hardware-limited and difficult to optimize further.")
+            print("\nPossible solutions:")
+            print("  - Reduce frame rate (current: {} FPS)".format(refresh_rate))
+            print("  - Reduce LED count (current: {} LEDs)".format(led_count))
+            print("  - The Pi5 SPI is already very fast, little room for improvement")
+        elif overhead_pct > 60:
+            print("PRIMARY BOTTLENECK: Python overhead")
+            print("Most time is spent in Python code (animation calculations, rendering).")
+            print("\nPossible solutions:")
+            print("  - Implement hot paths in Cython (50-100x faster)")
             print("  - Implement render functions in C (maximum speed)")
             print("  - Use PyPy JIT compiler")
-            print("  - Profile deeper to find specific slow parts in update_leds()")
+            print("  - Profile deeper with cProfile to find specific slow functions")
+        else:
+            print("BALANCED LOAD")
+            print("Time is split between SPI transfer and Python overhead.")
+            print("Both areas would benefit from optimization.")
 
 
 if __name__ == '__main__':
