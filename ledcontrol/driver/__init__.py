@@ -589,10 +589,46 @@ if pi_version == 5:
                     # Apply saturation to white channel
                     if sat != 255:
                         if sat == 0:
-                            # Full desaturation: all white
+                            # Full desaturation: produce white at target temperature
                             avg = (r + g + b) / 3.0
-                            r, g, b = 0, 0, 0
-                            w = avg + w
+                            
+                            # Get target temperature color
+                            target_r, target_g, target_b = color_temp_to_rgb(target_temp)
+                            white_r, white_g, white_b = color_temp_to_rgb(white_temp)
+                            
+                            # Normalize to 0-1 range
+                            target_r /= 255.0
+                            target_g /= 255.0
+                            target_b /= 255.0
+                            white_r /= 255.0
+                            white_g /= 255.0
+                            white_b /= 255.0
+                            
+                            # Normalize white color
+                            white_max = max(white_r, white_g, white_b)
+                            if white_max > 0:
+                                white_r /= white_max
+                                white_g /= white_max
+                                white_b /= white_max
+                            
+                            # Calculate how much W vs RGB to use based on temperature difference
+                            temp_diff_factor = abs(white_temp - target_temp) / max(white_temp, target_temp)
+                            w_usage = 1.0 - min(1.0, temp_diff_factor * 2.0)
+                            
+                            # Use W channel for efficiency, RGB for color temperature correction
+                            w = (avg + w) * w_usage
+                            rgb_amount = (avg + w) * (1.0 - w_usage)
+                            
+                            # Normalize target color
+                            target_max = max(target_r, target_g, target_b)
+                            if target_max > 0:
+                                target_r /= target_max
+                                target_g /= target_max
+                                target_b /= target_max
+                            
+                            r = rgb_amount * target_r
+                            g = rgb_amount * target_g
+                            b = rgb_amount * target_b
                         else:
                             # Partial desaturation
                             avg = (r + g + b) / 3.0
@@ -886,11 +922,45 @@ if pi_version == 5:
                         if sat_int != 255:
                             avg = (r + g + b) / 3.0
                             if sat_int == 0:
-                                # Full desaturation: all white
-                                r = np.zeros_like(r)
-                                g = np.zeros_like(g)
-                                b = np.zeros_like(b)
-                                w = avg + w
+                                # Full desaturation: produce white at target temperature
+                                # Get target temperature color
+                                target_rgb = color_temp_to_rgb(target_temp)
+                                white_rgb = color_temp_to_rgb(white_temp)
+                                
+                                # Normalize to 0-1 range
+                                target_r = target_rgb[0] / 255.0
+                                target_g = target_rgb[1] / 255.0
+                                target_b = target_rgb[2] / 255.0
+                                white_r = white_rgb[0] / 255.0
+                                white_g = white_rgb[1] / 255.0
+                                white_b = white_rgb[2] / 255.0
+                                
+                                # Normalize white color
+                                white_max = max(white_r, white_g, white_b)
+                                if white_max > 0:
+                                    white_r /= white_max
+                                    white_g /= white_max
+                                    white_b /= white_max
+                                
+                                # Calculate how much W vs RGB to use based on temperature difference
+                                temp_diff_factor = abs(white_temp - target_temp) / max(white_temp, target_temp)
+                                w_usage = 1.0 - min(1.0, temp_diff_factor * 2.0)
+                                
+                                # Use W channel for efficiency, RGB for color temperature correction
+                                total_white = avg + w
+                                w = total_white * w_usage
+                                rgb_amount = total_white * (1.0 - w_usage)
+                                
+                                # Normalize target color
+                                target_max = max(target_r, target_g, target_b)
+                                if target_max > 0:
+                                    target_r /= target_max
+                                    target_g /= target_max
+                                    target_b /= target_max
+                                
+                                r = rgb_amount * target_r
+                                g = rgb_amount * target_g
+                                b = rgb_amount * target_b
                             else:
                                 # Partial desaturation
                                 desat_factor = (255 - sat_int) / 255.0
@@ -1188,9 +1258,47 @@ elif pi_version == 3:
                         # Apply saturation
                         if sat != 255:
                             if sat == 0:
+                                # Full desaturation: produce white at target temperature
                                 avg = (r + g + b) / 3.0
-                                r, g, b = 0, 0, 0
-                                w = avg + w
+                                
+                                # Get target temperature color
+                                target_rgb = color_temp_to_rgb(target_temp)
+                                white_rgb = color_temp_to_rgb(white_temp)
+                                
+                                # Normalize to 0-1 range
+                                target_r = target_rgb[0] / 255.0
+                                target_g = target_rgb[1] / 255.0
+                                target_b = target_rgb[2] / 255.0
+                                white_r = white_rgb[0] / 255.0
+                                white_g = white_rgb[1] / 255.0
+                                white_b = white_rgb[2] / 255.0
+                                
+                                # Normalize white color
+                                white_max = max(white_r, white_g, white_b)
+                                if white_max > 0:
+                                    white_r /= white_max
+                                    white_g /= white_max
+                                    white_b /= white_max
+                                
+                                # Calculate how much W vs RGB to use based on temperature difference
+                                temp_diff_factor = abs(white_temp - target_temp) / max(white_temp, target_temp)
+                                w_usage = 1.0 - min(1.0, temp_diff_factor * 2.0)
+                                
+                                # Use W channel for efficiency, RGB for color temperature correction
+                                total_white = avg + w
+                                w = total_white * w_usage
+                                rgb_amount = total_white * (1.0 - w_usage)
+                                
+                                # Normalize target color
+                                target_max = max(target_r, target_g, target_b)
+                                if target_max > 0:
+                                    target_r /= target_max
+                                    target_g /= target_max
+                                    target_b /= target_max
+                                
+                                r = rgb_amount * target_r
+                                g = rgb_amount * target_g
+                                b = rgb_amount * target_b
                             else:
                                 avg = (r + g + b) / 3.0
                                 desat_factor = (255 - sat) / 255.0
