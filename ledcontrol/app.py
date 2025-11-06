@@ -464,6 +464,10 @@ def create_app(led_count,
             "pi_device_name": settings.get("pi_device_name", ""),
             "pi_group": settings.get("pi_group", ""),
             "pi_master_mode": settings.get("pi_master_mode", False),
+            # RGBW settings (app-level)
+            "use_white_channel": settings.get("use_white_channel", True),
+            "white_led_temperature": settings.get("white_led_temperature", 5000),
+            "rgbw_algorithm": settings.get("rgbw_algorithm", "legacy"),
         })
         try:
             with filename.open('w') as data_file:
