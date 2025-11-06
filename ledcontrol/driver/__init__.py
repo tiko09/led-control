@@ -238,7 +238,8 @@ if pi_version == 5:
                 self.led_count = led_count
                 self.strip_type = strip_type
                 self.has_white = (strip_type & 0x18000000) != 0
-                self.brightness = led_brightness / 255.0 if led_brightness < 255 else 1.0
+                # Note: Don't set brightness in the driver - it's already applied in render functions
+                # to avoid double-scaling which causes flickering
                 
                 try:
                     # Use the RGBW-capable driver from our fork
@@ -249,10 +250,6 @@ if pi_version == 5:
                         has_white=self.has_white
                     )
                     self.strip = self.driver.get_strip()
-                    
-                    # Set initial brightness
-                    if self.brightness < 1.0:
-                        self.strip.set_brightness(self.brightness)
                         
                 except FileNotFoundError as e:
                     raise RuntimeError(
