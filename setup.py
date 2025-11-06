@@ -80,7 +80,8 @@ if sys.platform.startswith('linux'):
 if pi_version == 5:
     # Raspberry Pi 5: Use SPI-based driver
     requirements.append('rpi5-ws2812')
-    print("Detected Raspberry Pi 5 - will use rpi5-ws2812 driver (SPI-based)")
+    requirements.append('spidev')  # For direct SPI access (RGBW support)
+    print("Detected Raspberry Pi 5 - will use rpi5-ws2812 driver (SPI-based) with RGBW support")
 elif pi_version == 3:
     # Raspberry Pi 3/4: Use PWM-based driver
     requirements.append('rpi_ws281x')

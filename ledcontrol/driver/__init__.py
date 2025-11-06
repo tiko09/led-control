@@ -226,70 +226,199 @@ if pi_version == 5:
             """
             Wrapper for rpi5-ws2812's Strip to provide rpi_ws281x-like API
             Note: rpi5-ws2812 uses SPI, so led_pin/led_freq/led_dma are ignored
+            Extended to support RGBW LEDs (SK6812-RGBW) by direct SPI manipulation
             """
             def __init__(self, led_count, led_pin, led_freq, led_dma, led_invert, led_brightness, led_channel, strip_type):
                 # rpi5-ws2812 uses SPI, default to SPI bus 0, device 0
                 # led_pin, led_freq, led_dma are ignored as they're GPIO/PWM specific
-                try:
-                    self.driver = WS2812SpiDriver(spi_bus=0, spi_device=0, led_count=led_count)
-                    self.strip = self.driver.get_strip()
-                except FileNotFoundError as e:
-                    raise RuntimeError(
-                        "SPI device not found. Please ensure:\n"
-                        "1. SPI is enabled: Run 'sudo raspi-config' -> Interfacing Options -> SPI -> Enable\n"
-                        "2. Your user is in the 'spidev' group: Run 'sudo adduser $USER spidev' and log out/in\n"
-                        "3. The SPI device exists: Check 'ls -l /dev/spidev*'\n"
-                        "4. You're running on a Raspberry Pi 5 (older models need the old version)\n"
-                        f"Original error: {e}"
-                    ) from e
-                except PermissionError as e:
-                    raise RuntimeError(
-                        "Permission denied accessing SPI device. Please:\n"
-                        "1. Add your user to the 'spidev' group: 'sudo adduser $USER spidev'\n"
-                        "2. Log out and log back in for group changes to take effect\n"
-                        "3. Or run with sudo (not recommended for security)\n"
-                        f"Original error: {e}"
-                    ) from e
-                
                 self.led_count = led_count
                 self.strip_type = strip_type
                 self.has_white = (strip_type & 0x18000000) != 0
+                self.brightness = led_brightness / 255.0 if led_brightness < 255 else 1.0
                 
-                # Set initial brightness
-                if led_brightness < 255:
-                    self.strip.set_brightness(led_brightness / 255.0)
+                if self.has_white:
+                    # For RGBW strips, we need to handle SPI data manually
+                    # because rpi5-ws2812 doesn't support 4-byte pixels
+                    import spidev
+                    self.spi = spidev.SpiDev()
+                    try:
+                        self.spi.open(0, 0)  # SPI bus 0, device 0
+                        # SK6812 timing: 800kHz data rate
+                        # SPI needs to run at 2.4 MHz (3 bits per WS2812 bit)
+                        self.spi.max_speed_hz = 2400000
+                        self.spi.mode = 0b00
+                    except FileNotFoundError as e:
+                        raise RuntimeError(
+                            "SPI device not found. Please ensure:\n"
+                            "1. SPI is enabled: Run 'sudo raspi-config' -> Interfacing Options -> SPI -> Enable\n"
+                            "2. Your user is in the 'spidev' group: Run 'sudo adduser $USER spidev' and log out/in\n"
+                            "3. The SPI device exists: Check 'ls -l /dev/spidev*'\n"
+                            "4. You're running on a Raspberry Pi 5 (older models need the old version)\n"
+                            f"Original error: {e}"
+                        ) from e
+                    except PermissionError as e:
+                        raise RuntimeError(
+                            "Permission denied accessing SPI device. Please:\n"
+                            "1. Add your user to the 'spidev' group: 'sudo adduser $USER spidev'\n"
+                            "2. Log out and log back in for group changes to take effect\n"
+                            "3. Or run with sudo (not recommended for security)\n"
+                            f"Original error: {e}"
+                        ) from e
+                    
+                    # Buffer for RGBW data: 4 bytes per LED × 3 SPI bits per data bit × 8 bits = 96 SPI bits = 12 SPI bytes per LED
+                    self.pixel_buffer = [0] * (led_count * 4)  # RGBW for each pixel
+                    self.driver = None
+                    self.strip = None
+                else:
+                    # For RGB strips, use the standard rpi5-ws2812 driver
+                    try:
+                        self.driver = WS2812SpiDriver(spi_bus=0, spi_device=0, led_count=led_count)
+                        self.strip = self.driver.get_strip()
+                        self.spi = None
+                        self.pixel_buffer = None
+                    except FileNotFoundError as e:
+                        raise RuntimeError(
+                            "SPI device not found. Please ensure:\n"
+                            "1. SPI is enabled: Run 'sudo raspi-config' -> Interfacing Options -> SPI -> Enable\n"
+                            "2. Your user is in the 'spidev' group: Run 'sudo adduser $USER spidev' and log out/in\n"
+                            "3. The SPI device exists: Check 'ls -l /dev/spidev*'\n"
+                            "4. You're running on a Raspberry Pi 5 (older models need the old version)\n"
+                            f"Original error: {e}"
+                        ) from e
+                    except PermissionError as e:
+                        raise RuntimeError(
+                            "Permission denied accessing SPI device. Please:\n"
+                            "1. Add your user to the 'spidev' group: 'sudo adduser $USER spidev'\n"
+                            "2. Log out and log back in for group changes to take effect\n"
+                            "3. Or run with sudo (not recommended for security)\n"
+                            f"Original error: {e}"
+                        ) from e
+                    
+                    # Set initial brightness
+                    if self.brightness < 1.0:
+                        self.strip.set_brightness(self.brightness)
             
             def begin(self):
                 """Initialize - no-op for rpi5-ws2812 (already initialized in constructor)"""
                 return 0
             
+            def _encode_byte_to_spi(self, byte_val):
+                """
+                Convert one byte (8 bits) to SPI format for WS2812/SK6812
+                Each data bit becomes 3 SPI bits:
+                  1 -> 110 (high for ~0.8us, low for ~0.4us at 2.4MHz)
+                  0 -> 100 (high for ~0.4us, low for ~0.8us at 2.4MHz)
+                Returns list of 3 bytes (24 SPI bits for 8 data bits)
+                """
+                result = []
+                for i in range(7, -1, -1):  # MSB first
+                    bit = (byte_val >> i) & 1
+                    if bit:
+                        # Bit 1: 110 in 3-bit groups
+                        result.extend([0b11000000, 0b00000000, 0b00000000])
+                    else:
+                        # Bit 0: 100 in 3-bit groups  
+                        result.extend([0b10000000, 0b00000000, 0b00000000])
+                
+                # Pack the bits more efficiently
+                # We have 24 bits (3 bits × 8 data bits)
+                # Pack into 3 bytes
+                packed = []
+                bit_string = ''
+                for i in range(8):
+                    bit = (byte_val >> (7 - i)) & 1
+                    if bit:
+                        bit_string += '110'
+                    else:
+                        bit_string += '100'
+                
+                # Convert bit string to bytes
+                for i in range(0, 24, 8):
+                    byte = int(bit_string[i:i+8], 2) if i+8 <= len(bit_string) else int(bit_string[i:].ljust(8, '0'), 2)
+                    packed.append(byte)
+                
+                return packed
+            
             def show(self):
                 """Write pixel buffer to LED strip"""
-                self.strip.show()
+                if self.has_white and self.spi:
+                    # Manual SPI transfer for RGBW
+                    # Convert pixel buffer to SPI data
+                    spi_data = []
+                    
+                    for i in range(self.led_count):
+                        # Get GRBW bytes for this pixel (SK6812 order)
+                        g = self.pixel_buffer[i * 4 + 0]
+                        r = self.pixel_buffer[i * 4 + 1]
+                        b = self.pixel_buffer[i * 4 + 2]
+                        w = self.pixel_buffer[i * 4 + 3]
+                        
+                        # Apply brightness
+                        g = int(g * self.brightness)
+                        r = int(r * self.brightness)
+                        b = int(b * self.brightness)
+                        w = int(w * self.brightness)
+                        
+                        # Encode each byte to SPI format
+                        # SK6812-RGBW order is G, R, B, W
+                        for byte_val in [g, r, b, w]:
+                            spi_data.extend(self._encode_byte_to_spi(byte_val))
+                    
+                    # Send SPI data
+                    self.spi.xfer2(spi_data)
+                else:
+                    # Use standard driver for RGB
+                    self.strip.show()
             
             def setPixelColor(self, index, color):
                 """Set pixel color from packed 32-bit RGBW value"""
-                r, g, b, w = unpack_rgbw(color)
-                # rpi5-ws2812 doesn't support white channel directly
-                # For RGBW strips, we add white to RGB
-                if self.has_white and w > 0:
-                    r = min(255, r + w)
-                    g = min(255, g + w)
-                    b = min(255, b + w)
-                self.strip.set_pixel_color(index, Color(r, g, b))
+                if self.has_white and self.pixel_buffer is not None:
+                    # For RGBW strips: store in our buffer
+                    # Unpack color: format is 0xWWRRGGBB
+                    w = (color >> 24) & 0xFF
+                    r = (color >> 16) & 0xFF
+                    g = (color >> 8) & 0xFF
+                    b = color & 0xFF
+                    
+                    # Store in GRBW order (SK6812 wire order)
+                    self.pixel_buffer[index * 4 + 0] = g
+                    self.pixel_buffer[index * 4 + 1] = r
+                    self.pixel_buffer[index * 4 + 2] = b
+                    self.pixel_buffer[index * 4 + 3] = w
+                else:
+                    # For RGB strips: use standard driver
+                    r = (color >> 16) & 0xFF
+                    g = (color >> 8) & 0xFF
+                    b = color & 0xFF
+                    self.strip.set_pixel_color(index, Color(r, g, b))
             
             def getPixelColor(self, index):
-                """Get pixel color as packed 32-bit RGBW value - NOT IMPLEMENTED in rpi5-ws2812"""
-                # rpi5-ws2812 doesn't support reading back pixel values
-                return 0
+                """Get pixel color as packed 32-bit RGBW value"""
+                if self.has_white and self.pixel_buffer is not None:
+                    # Read from our buffer
+                    g = self.pixel_buffer[index * 4 + 0]
+                    r = self.pixel_buffer[index * 4 + 1]
+                    b = self.pixel_buffer[index * 4 + 2]
+                    w = self.pixel_buffer[index * 4 + 3]
+                    return (w << 24) | (r << 16) | (g << 8) | b
+                else:
+                    # rpi5-ws2812 doesn't support reading back pixel values for RGB
+                    return 0
             
             def numPixels(self):
                 """Get number of pixels"""
-                return self.strip.num_pixels()
+                return self.led_count
             
             def cleanup(self):
-                """Cleanup - clear the strip"""
-                self.strip.clear()
+                """Cleanup - clear the strip and close SPI"""
+                if self.has_white and self.spi:
+                    # Clear RGBW buffer
+                    self.pixel_buffer = [0] * (self.led_count * 4)
+                    self.show()
+                    self.spi.close()
+                else:
+                    # Clear RGB strip
+                    self.strip.clear()
         
         # Wrapper functions for compatibility with old driver API
         def new_ws2811_t():
