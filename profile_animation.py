@@ -40,7 +40,13 @@ def profile_animation(duration=10):
         config = json.load(f)
     
     # Initialize controllers
-    led_controller = LEDController(config)
+    led_controller = LEDController(
+        led_count=config['led_count'],
+        led_pin=config['led_pin'],
+        led_data_rate=config['led_data_rate'],
+        led_dma_channel=config['led_dma_channel'],
+        led_pixel_order=config['led_pixel_order']
+    )
     animation_controller = AnimationController(led_controller, config)
     
     # Get current animation config

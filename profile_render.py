@@ -37,7 +37,14 @@ def profile_render_loop(num_frames=300):
     with open(config_path) as f:
         config = json.load(f)
     
-    led_controller = LEDController(config)
+    # Extract LED controller parameters
+    led_controller = LEDController(
+        led_count=config['led_count'],
+        led_pin=config['led_pin'],
+        led_data_rate=config['led_data_rate'],
+        led_dma_channel=config['led_dma_channel'],
+        led_pixel_order=config['led_pixel_order']
+    )
     animation_controller = AnimationController(led_controller, config)
     
     print(f"Configuration:")
