@@ -398,7 +398,8 @@ class AnimationController:
                         computed_brightness,
                         mode,
                         settings['render_mode'],
-                        settings['render_target']
+                        settings['render_target'],
+                        self._settings.get('use_white_channel', True)
                     )
 
                 except Exception as e:
@@ -413,7 +414,8 @@ class AnimationController:
                         1.0,
                         animfunctions.ColorMode.rgb,
                         settings['render_mode'],
-                        settings['render_target']
+                        settings['render_target'],
+                        self._settings.get('use_white_channel', True)
                     )
                     self._led_controller.render()
                     return
