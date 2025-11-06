@@ -1,3 +1,6 @@
 [submodule "ledcontrol/driver/rpi_ws281x"]
 	path = ledcontrol/driver/rpi_ws281x
 	url = https://github.com/jgarff/rpi_ws281x.git
+[submodule "ledcontrol/driver/rpi5-ws2812-rgbw"]
+	path = ledcontrol/driver/rpi5-ws2812-rgbw
+	url = https://github.com/tiko09/rpi5-ws2812-rgbw.git
