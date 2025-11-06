@@ -37,20 +37,67 @@ def profile_render_loop(num_frames=300):
     with open(config_path) as f:
         config = json.load(f)
     
-    # Extract LED controller parameters
+    # Extract LED controller parameters with defaults matching __init__.py
+    led_count = config.get('led_count', 144)  # Will be overridden by command line in production
+    led_pin = config.get('led_pin', 18)
+    led_data_rate = config.get('led_data_rate', 800000)
+    led_dma_channel = config.get('led_dma_channel', 10)
+    led_pixel_order = config.get('led_pixel_order', 'GRBW')
+    
+    # If config doesn't have these values, try to read from systemd service or use defaults
+    # For profiling, we'll just use sensible defaults
+    if led_count == 0:
+        print("WARNING: led_count not configured, using default of 144")
+        led_count = 144
+    
     led_controller = LEDController(
-        led_count=config['led_count'],
-        led_pin=config['led_pin'],
-        led_data_rate=config['led_data_rate'],
-        led_dma_channel=config['led_dma_channel'],
-        led_pixel_order=config['led_pixel_order']
+        led_count=led_count,
+        led_pin=led_pin,
+        led_data_rate=led_data_rate,
+        led_dma_channel=led_dma_channel,
+        led_pixel_order=led_pixel_order
     )
-    animation_controller = AnimationController(led_controller, config)
+    
+    # For AnimationController, we need to extract the right parameters
+    refresh_rate = config.get('frame_rate', 60)
+    led_brightness_limit = config.get('brightness_limit', 1.0)
+    
+    # Import pixelmappings
+    import ledcontrol.pixelmappings as pixelmappings
+    mapping_func = pixelmappings.line(led_count)
+    
+    animation_controller = AnimationController(
+        led_controller,
+        refresh_rate,
+        led_count,
+        mapping_func,
+        no_timer_reset=False,
+        led_brightness_limit=led_brightness_limit
+    )
     
     print(f"Configuration:")
-    print(f"  LED count: {config['led_count']}")
-    print(f"  Frame rate: {config.get('frame_rate', 30)} FPS")
-    print(f"  Animation: {config.get('current_animation', {}).get('type', 'Unknown')}")
+    print(f"  LED count: {led_count}")
+    print(f"  Frame rate: {refresh_rate} FPS")
+    print(f"  Pixel order: {led_pixel_order}")
+    
+    # Load controller settings from config
+    if 'functions' in config:
+        animation_controller._settings['functions'] = config['functions']
+    if 'palettes' in config:
+        animation_controller._settings['palettes'] = config['palettes']
+    if 'current_animation' in config:
+        animation_controller._settings['current_animation'] = config['current_animation']
+    if 'global_brightness' in config:
+        animation_controller._settings['global_brightness'] = config['global_brightness']
+    if 'on' in config:
+        animation_controller._settings['on'] = config['on']
+    
+    current_animation = animation_controller._settings.get('current_animation', {})
+    if not current_animation:
+        print("WARNING: No animation configured, using default")
+    else:
+        print(f"  Animation: {current_animation.get('type', 'Unknown')}")
+    
     print(f"  Profiling {num_frames} frames...\n")
     
     # Timing storage
