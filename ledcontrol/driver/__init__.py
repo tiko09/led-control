@@ -1261,7 +1261,7 @@ elif pi_version == 3:
                                 
                                 target_r = target_rgb[0] / 255.0
                                 target_g = target_rgb[1] / 255.0
-                            target_b = target_rgb[2] / 255.0
+                                target_b = target_rgb[2] / 255.0
                                 white_r = white_rgb[0] / 255.0
                                 white_g = white_rgb[1] / 255.0
                                 white_b = white_rgb[2] / 255.0
