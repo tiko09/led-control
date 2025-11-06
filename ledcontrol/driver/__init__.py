@@ -530,12 +530,12 @@ if pi_version == 5:
             
             if has_white:
                 if rgbw_algorithm == 'advanced':
-                    # Advanced algorithm: Extract minimum RGB value to white channel
-                    # and compensate for white LED color temperature to match target
-                    min_val = min(r, g, b)
-                    
-                    if min_val > 0:
-                        # Get target color and white LED color as RGB
+                    # Special case: Full desaturation (saturation=0) produces white at target temperature
+                    if sat == 0:
+                        # Calculate total brightness from original RGB
+                        total_brightness = max(r, g, b)
+                        
+                        # Get target temperature color and white LED color
                         target_r, target_g, target_b = color_temp_to_rgb(target_temp)
                         white_r, white_g, white_b = color_temp_to_rgb(white_temp)
                         
@@ -554,46 +554,31 @@ if pi_version == 5:
                             white_g /= white_max
                             white_b /= white_max
                         
-                        # Calculate color temperature difference factor
-                        # If white LED matches target: use max W (efficient)
-                        # If white LED differs from target: reduce W, compensate with RGB
+                        # Calculate how much W vs RGB to use based on temperature difference
                         temp_diff_factor = abs(white_temp - target_temp) / max(white_temp, target_temp)
-                        w_usage = 1.0 - min(1.0, temp_diff_factor * 2.0)  # Reduce W usage based on temp difference
+                        w_usage = 1.0 - min(1.0, temp_diff_factor * 2.0)
                         
-                        # Extract white with adjusted amount
-                        w = min_val * w_usage
+                        # Use W channel for efficiency, RGB for color temperature correction
+                        w = total_brightness * w_usage
+                        rgb_amount = total_brightness * (1.0 - w_usage)
                         
-                        # Compensate RGB for white LED color
-                        r = r - (w * white_r)
-                        g = g - (w * white_g)
-                        b = b - (w * white_b)
+                        # Normalize target color
+                        target_max = max(target_r, target_g, target_b)
+                        if target_max > 0:
+                            target_r /= target_max
+                            target_g /= target_max
+                            target_b /= target_max
                         
-                        # Add target temperature compensation to RGB
-                        # This shifts the color towards the target temperature
-                        if temp_diff_factor > 0.01:  # Only if there's a significant difference
-                            rgb_compensation = min_val * (1.0 - w_usage)
-                            target_max = max(target_r, target_g, target_b)
-                            if target_max > 0:
-                                target_r /= target_max
-                                target_g /= target_max
-                                target_b /= target_max
-                            r = r + (rgb_compensation * target_r)
-                            g = g + (rgb_compensation * target_g)
-                            b = b + (rgb_compensation * target_b)
+                        r = rgb_amount * target_r
+                        g = rgb_amount * target_g
+                        b = rgb_amount * target_b
+                    else:
+                        # Normal case: Extract minimum RGB value to white channel
+                        # and compensate for white LED color temperature to match target
+                        min_val = min(r, g, b)
                         
-                        # Clamp to valid range
-                        r = max(0.0, r)
-                        g = max(0.0, g)
-                        b = max(0.0, b)
-                    
-                    # Apply saturation to white channel
-                    if sat != 255:
-                        if sat == 0:
-                            # Full desaturation: produce white at target temperature
-                            # Calculate total brightness from RGB (before desaturation)
-                            total_brightness = max(r, g, b)
-                            
-                            # Get target temperature color
+                        if min_val > 0:
+                            # Get target color and white LED color as RGB
                             target_r, target_g, target_b = color_temp_to_rgb(target_temp)
                             white_r, white_g, white_b = color_temp_to_rgb(white_temp)
                             
@@ -612,26 +597,40 @@ if pi_version == 5:
                                 white_g /= white_max
                                 white_b /= white_max
                             
-                            # Calculate how much W vs RGB to use based on temperature difference
+                            # Calculate color temperature difference factor
+                            # If white LED matches target: use max W (efficient)
+                            # If white LED differs from target: reduce W, compensate with RGB
                             temp_diff_factor = abs(white_temp - target_temp) / max(white_temp, target_temp)
-                            w_usage = 1.0 - min(1.0, temp_diff_factor * 2.0)
+                            w_usage = 1.0 - min(1.0, temp_diff_factor * 2.0)  # Reduce W usage based on temp difference
                             
-                            # Use W channel for efficiency, RGB for color temperature correction
-                            w = total_brightness * w_usage
-                            rgb_amount = total_brightness * (1.0 - w_usage)
+                            # Extract white with adjusted amount
+                            w = min_val * w_usage
                             
-                            # Normalize target color
-                            target_max = max(target_r, target_g, target_b)
-                            if target_max > 0:
-                                target_r /= target_max
-                                target_g /= target_max
-                                target_b /= target_max
+                            # Compensate RGB for white LED color
+                            r = r - (w * white_r)
+                            g = g - (w * white_g)
+                            b = b - (w * white_b)
                             
-                            r = rgb_amount * target_r
-                            g = rgb_amount * target_g
-                            b = rgb_amount * target_b
-                        else:
-                            # Partial desaturation
+                            # Add target temperature compensation to RGB
+                            # This shifts the color towards the target temperature
+                            if temp_diff_factor > 0.01:  # Only if there's a significant difference
+                                rgb_compensation = min_val * (1.0 - w_usage)
+                                target_max = max(target_r, target_g, target_b)
+                                if target_max > 0:
+                                    target_r /= target_max
+                                    target_g /= target_max
+                                    target_b /= target_max
+                                r = r + (rgb_compensation * target_r)
+                                g = g + (rgb_compensation * target_g)
+                                b = b + (rgb_compensation * target_b)
+                            
+                            # Clamp to valid range
+                            r = max(0.0, r)
+                            g = max(0.0, g)
+                            b = max(0.0, b)
+                        
+                        # Partial desaturation (for sat != 255 and sat != 0)
+                        if sat != 255:
                             avg = (r + g + b) / 3.0
                             desat_factor = (255 - sat) / 255.0
                             r = r * (sat / 255.0) + avg * desat_factor
@@ -864,14 +863,12 @@ if pi_version == 5:
                 
                 if has_white:
                     if rgbw_algorithm == 'advanced':
-                        # Advanced algorithm: Extract minimum RGB value to white channel
-                        # and compensate for white LED color temperature to match target
-                        min_vals = np.minimum(np.minimum(r, g), b)
-                        
-                        # Only process pixels with non-zero minimum
-                        mask_has_min = min_vals > 0
-                        if np.any(mask_has_min):
-                            # Get target color and white LED color as RGB
+                        # Special case: Full desaturation (saturation=0) produces white at target temperature
+                        if sat_int == 0:
+                            # Calculate total brightness from original RGB
+                            total_brightness = np.maximum(np.maximum(r, g), b)
+                            
+                            # Get target temperature color and white LED color
                             target_rgb = color_temp_to_rgb(target_temp)
                             white_rgb = color_temp_to_rgb(white_temp)
                             
@@ -890,43 +887,33 @@ if pi_version == 5:
                                 white_g /= white_max
                                 white_b /= white_max
                             
-                            # Calculate color temperature difference factor
+                            # Calculate how much W vs RGB to use based on temperature difference
                             temp_diff_factor = abs(white_temp - target_temp) / max(white_temp, target_temp)
                             w_usage = 1.0 - min(1.0, temp_diff_factor * 2.0)
                             
-                            # Extract white with adjusted amount
-                            w[mask_has_min] = min_vals[mask_has_min] * w_usage
+                            # Use W channel for efficiency, RGB for color temperature correction
+                            w = total_brightness * w_usage
+                            rgb_amount = total_brightness * (1.0 - w_usage)
                             
-                            # Compensate RGB for white LED color
-                            r[mask_has_min] = r[mask_has_min] - (w[mask_has_min] * white_r)
-                            g[mask_has_min] = g[mask_has_min] - (w[mask_has_min] * white_g)
-                            b[mask_has_min] = b[mask_has_min] - (w[mask_has_min] * white_b)
+                            # Normalize target color
+                            target_max = max(target_r, target_g, target_b)
+                            if target_max > 0:
+                                target_r /= target_max
+                                target_g /= target_max
+                                target_b /= target_max
                             
-                            # Add target temperature compensation to RGB
-                            if temp_diff_factor > 0.01:
-                                rgb_compensation = min_vals[mask_has_min] * (1.0 - w_usage)
-                                target_max = max(target_r, target_g, target_b)
-                                if target_max > 0:
-                                    target_r /= target_max
-                                    target_g /= target_max
-                                    target_b /= target_max
-                                r[mask_has_min] = r[mask_has_min] + (rgb_compensation * target_r)
-                                g[mask_has_min] = g[mask_has_min] + (rgb_compensation * target_g)
-                                b[mask_has_min] = b[mask_has_min] + (rgb_compensation * target_b)
+                            r = rgb_amount * target_r
+                            g = rgb_amount * target_g
+                            b = rgb_amount * target_b
+                        else:
+                            # Normal case: Extract minimum RGB value to white channel
+                            # and compensate for white LED color temperature to match target
+                            min_vals = np.minimum(np.minimum(r, g), b)
                             
-                            # Clamp to valid range
-                            r = np.maximum(0.0, r)
-                            g = np.maximum(0.0, g)
-                            b = np.maximum(0.0, b)
-                        
-                        # Apply saturation
-                        if sat_int != 255:
-                            if sat_int == 0:
-                                # Full desaturation: produce white at target temperature
-                                # Calculate total brightness from RGB (before desaturation)
-                                total_brightness = np.maximum(np.maximum(r, g), b)
-                                
-                                # Get target temperature color
+                            # Only process pixels with non-zero minimum
+                            mask_has_min = min_vals > 0
+                            if np.any(mask_has_min):
+                                # Get target color and white LED color as RGB
                                 target_rgb = color_temp_to_rgb(target_temp)
                                 white_rgb = color_temp_to_rgb(white_temp)
                                 
@@ -945,27 +932,38 @@ if pi_version == 5:
                                     white_g /= white_max
                                     white_b /= white_max
                                 
-                                # Calculate how much W vs RGB to use based on temperature difference
+                                # Calculate color temperature difference factor
                                 temp_diff_factor = abs(white_temp - target_temp) / max(white_temp, target_temp)
                                 w_usage = 1.0 - min(1.0, temp_diff_factor * 2.0)
                                 
-                                # Use W channel for efficiency, RGB for color temperature correction
-                                w = total_brightness * w_usage
-                                rgb_amount = total_brightness * (1.0 - w_usage)
+                                # Extract white with adjusted amount
+                                w[mask_has_min] = min_vals[mask_has_min] * w_usage
                                 
-                                # Normalize target color
-                                target_max = max(target_r, target_g, target_b)
-                                if target_max > 0:
-                                    target_r /= target_max
-                                    target_g /= target_max
-                                    target_b /= target_max
+                                # Compensate RGB for white LED color
+                                r[mask_has_min] = r[mask_has_min] - (w[mask_has_min] * white_r)
+                                g[mask_has_min] = g[mask_has_min] - (w[mask_has_min] * white_g)
+                                b[mask_has_min] = b[mask_has_min] - (w[mask_has_min] * white_b)
                                 
-                                r = rgb_amount * target_r
-                                g = rgb_amount * target_g
-                                b = rgb_amount * target_b
-                            else:
+                                # Add target temperature compensation to RGB
+                                if temp_diff_factor > 0.01:
+                                    rgb_compensation = min_vals[mask_has_min] * (1.0 - w_usage)
+                                    target_max = max(target_r, target_g, target_b)
+                                    if target_max > 0:
+                                        target_r /= target_max
+                                        target_g /= target_max
+                                        target_b /= target_max
+                                    r[mask_has_min] = r[mask_has_min] + (rgb_compensation * target_r)
+                                    g[mask_has_min] = g[mask_has_min] + (rgb_compensation * target_g)
+                                    b[mask_has_min] = b[mask_has_min] + (rgb_compensation * target_b)
+                                
+                                # Clamp to valid range
+                                r = np.maximum(0.0, r)
+                                g = np.maximum(0.0, g)
+                                b = np.maximum(0.0, b)
+                            
+                            # Partial desaturation (for sat != 255 and sat != 0)
+                            if sat_int != 255:
                                 avg = (r + g + b) / 3.0
-                                # Partial desaturation
                                 desat_factor = (255 - sat_int) / 255.0
                                 sat_factor = sat_int / 255.0
                                 r = r * sat_factor + avg * desat_factor
@@ -1210,14 +1208,16 @@ elif pi_version == 3:
                 
                 if has_white:
                     if rgbw_algorithm == 'advanced':
-                        # Advanced algorithm with target temperature support
-                        min_val = min(r, g, b)
-                        
-                        if min_val > 0:
-                            # Get target and white LED colors
+                        # Special case: Full desaturation (saturation=0) produces white at target temperature
+                        if sat == 0:
+                            # Calculate total brightness from original RGB
+                            total_brightness = max(r, g, b)
+                            
+                            # Get target temperature color and white LED color
                             target_rgb = color_temp_to_rgb(target_temp)
                             white_rgb = color_temp_to_rgb(white_temp)
                             
+                            # Normalize to 0-1 range
                             target_r = target_rgb[0] / 255.0
                             target_g = target_rgb[1] / 255.0
                             target_b = target_rgb[2] / 255.0
@@ -1232,47 +1232,36 @@ elif pi_version == 3:
                                 white_g /= white_max
                                 white_b /= white_max
                             
-                            # Calculate temperature difference
+                            # Calculate how much W vs RGB to use based on temperature difference
                             temp_diff_factor = abs(white_temp - target_temp) / max(white_temp, target_temp)
                             w_usage = 1.0 - min(1.0, temp_diff_factor * 2.0)
                             
-                            # Extract white
-                            w = min_val * w_usage
-                            r = r - (w * white_r)
-                            g = g - (w * white_g)
-                            b = b - (w * white_b)
+                            # Use W channel for efficiency, RGB for color temperature correction
+                            w = total_brightness * w_usage
+                            rgb_amount = total_brightness * (1.0 - w_usage)
                             
-                            # Add target temperature compensation
-                            if temp_diff_factor > 0.01:
-                                rgb_compensation = min_val * (1.0 - w_usage)
-                                target_max = max(target_r, target_g, target_b)
-                                if target_max > 0:
-                                    target_r /= target_max
-                                    target_g /= target_max
-                                    target_b /= target_max
-                                r = r + (rgb_compensation * target_r)
-                                g = g + (rgb_compensation * target_g)
-                                b = b + (rgb_compensation * target_b)
+                            # Normalize target color
+                            target_max = max(target_r, target_g, target_b)
+                            if target_max > 0:
+                                target_r /= target_max
+                                target_g /= target_max
+                                target_b /= target_max
                             
-                            r = max(0.0, r)
-                            g = max(0.0, g)
-                            b = max(0.0, b)
-                        
-                        # Apply saturation
-                        if sat != 255:
-                            if sat == 0:
-                                # Full desaturation: produce white at target temperature
-                                # Calculate total brightness from RGB (before desaturation)
-                                total_brightness = max(r, g, b)
-                                
-                                # Get target temperature color
+                            r = rgb_amount * target_r
+                            g = rgb_amount * target_g
+                            b = rgb_amount * target_b
+                        else:
+                            # Normal case: Extract minimum RGB value to white channel
+                            min_val = min(r, g, b)
+                            
+                            if min_val > 0:
+                                # Get target and white LED colors
                                 target_rgb = color_temp_to_rgb(target_temp)
                                 white_rgb = color_temp_to_rgb(white_temp)
                                 
-                                # Normalize to 0-1 range
                                 target_r = target_rgb[0] / 255.0
                                 target_g = target_rgb[1] / 255.0
-                                target_b = target_rgb[2] / 255.0
+                            target_b = target_rgb[2] / 255.0
                                 white_r = white_rgb[0] / 255.0
                                 white_g = white_rgb[1] / 255.0
                                 white_b = white_rgb[2] / 255.0
@@ -1284,25 +1273,34 @@ elif pi_version == 3:
                                     white_g /= white_max
                                     white_b /= white_max
                                 
-                                # Calculate how much W vs RGB to use based on temperature difference
+                                # Calculate temperature difference
                                 temp_diff_factor = abs(white_temp - target_temp) / max(white_temp, target_temp)
                                 w_usage = 1.0 - min(1.0, temp_diff_factor * 2.0)
                                 
-                                # Use W channel for efficiency, RGB for color temperature correction
-                                w = total_brightness * w_usage
-                                rgb_amount = total_brightness * (1.0 - w_usage)
+                                # Extract white
+                                w = min_val * w_usage
+                                r = r - (w * white_r)
+                                g = g - (w * white_g)
+                                b = b - (w * white_b)
                                 
-                                # Normalize target color
-                                target_max = max(target_r, target_g, target_b)
-                                if target_max > 0:
-                                    target_r /= target_max
-                                    target_g /= target_max
-                                    target_b /= target_max
+                                # Add target temperature compensation
+                                if temp_diff_factor > 0.01:
+                                    rgb_compensation = min_val * (1.0 - w_usage)
+                                    target_max = max(target_r, target_g, target_b)
+                                    if target_max > 0:
+                                        target_r /= target_max
+                                        target_g /= target_max
+                                        target_b /= target_max
+                                    r = r + (rgb_compensation * target_r)
+                                    g = g + (rgb_compensation * target_g)
+                                    b = b + (rgb_compensation * target_b)
                                 
-                                r = rgb_amount * target_r
-                                g = rgb_amount * target_g
-                                b = rgb_amount * target_b
-                            else:
+                                r = max(0.0, r)
+                                g = max(0.0, g)
+                                b = max(0.0, b)
+                            
+                            # Partial desaturation (for sat != 255 and sat != 0)
+                            if sat != 255:
                                 avg = (r + g + b) / 3.0
                                 desat_factor = (255 - sat) / 255.0
                                 r = r * (sat / 255.0) + avg * desat_factor
