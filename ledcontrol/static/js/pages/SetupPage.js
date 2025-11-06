@@ -22,7 +22,7 @@ export default {
       return store.get('groups');
     },
     ledStripType: function() {
-      return store.get('led_strip_type');
+      return store.get('led_strip_type') || '';
     }
   },
   methods: {
