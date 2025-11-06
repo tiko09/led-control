@@ -129,7 +129,7 @@ class LEDController:
     def set_range(self, pixels, start, end,
                   correction, saturation, brightness, color_mode,
                   render_mode, render_target, use_white_channel=True, 
-                  white_temp=5000, rgbw_algorithm='legacy'):
+                  white_temp=5000, rgbw_algorithm='legacy', target_temp=6500):
         if render_mode == TargetMode.local:
             if driver.is_raspberrypi():
                 if color_mode == animfunctions.ColorMode.hsv:
@@ -143,7 +143,7 @@ class LEDController:
                                                          start, end,
                                                          correction, saturation,  brightness, 1.0,
                                                          self._has_white and use_white_channel,
-                                                         white_temp, rgbw_algorithm)
+                                                         white_temp, rgbw_algorithm, target_temp)
         else:
             # Convert to numpy array directly (faster than fromiter + chain)
             data = np.array(pixels, dtype=np.float32).ravel()

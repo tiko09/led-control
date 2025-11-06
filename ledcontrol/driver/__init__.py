@@ -502,8 +502,26 @@ if pi_version == 5:
             return pack_rgbw(r, g, b, w)
         
         # RGB rendering
-        def render_rgb_float(rgb, corr_rgb, saturation, brightness, has_white, white_temp=5000, rgbw_algorithm='legacy'):
-            """Convert RGB float to packed RGBW"""
+        def render_rgb_float(rgb, corr_rgb, saturation, brightness, has_white, white_temp=5000, rgbw_algorithm='legacy', target_temp=6500):
+            """
+            Convert RGB float to packed RGBW
+            
+            Args:
+                rgb: Input RGB color (0.0-1.0)
+                corr_rgb: RGB correction for calibrating RGB subpixels to 6500K neutral
+                saturation: Saturation level (0.0-1.0)
+                brightness: Brightness level (0.0-1.0)
+                has_white: Whether LED strip has dedicated white channel
+                white_temp: Actual color temperature of W LED in Kelvin (e.g., 5000K for SK6812)
+                rgbw_algorithm: 'legacy' or 'advanced'
+                target_temp: Target color temperature in Kelvin (from global_color_temp)
+            
+            Architecture:
+            - corr_rgb: Calibrates RGB subpixels to neutral 6500K white
+            - target_temp: Desired output temperature (e.g., 3200K warm stage light)
+            - white_temp: Actual W LED color (e.g., 5000K)
+            - Algorithm mixes RGB+W to achieve target while maximizing W efficiency
+            """
             r = clamp(rgb[0], 0.0, 1.0)
             g = clamp(rgb[1], 0.0, 1.0)
             b = clamp(rgb[2], 0.0, 1.0)
@@ -513,12 +531,18 @@ if pi_version == 5:
             if has_white:
                 if rgbw_algorithm == 'advanced':
                     # Advanced algorithm: Extract minimum RGB value to white channel
-                    # and compensate for white LED color temperature
+                    # and compensate for white LED color temperature to match target
                     min_val = min(r, g, b)
                     
                     if min_val > 0:
-                        # Get white LED color as RGB
+                        # Get target color and white LED color as RGB
+                        target_r, target_g, target_b = color_temp_to_rgb(target_temp)
                         white_r, white_g, white_b = color_temp_to_rgb(white_temp)
+                        
+                        # Normalize to 0-1 range
+                        target_r /= 255.0
+                        target_g /= 255.0
+                        target_b /= 255.0
                         white_r /= 255.0
                         white_g /= 255.0
                         white_b /= 255.0
@@ -530,11 +554,32 @@ if pi_version == 5:
                             white_g /= white_max
                             white_b /= white_max
                         
-                        # Extract white and compensate RGB
-                        w = min_val
+                        # Calculate color temperature difference factor
+                        # If white LED matches target: use max W (efficient)
+                        # If white LED differs from target: reduce W, compensate with RGB
+                        temp_diff_factor = abs(white_temp - target_temp) / max(white_temp, target_temp)
+                        w_usage = 1.0 - min(1.0, temp_diff_factor * 2.0)  # Reduce W usage based on temp difference
+                        
+                        # Extract white with adjusted amount
+                        w = min_val * w_usage
+                        
+                        # Compensate RGB for white LED color
                         r = r - (w * white_r)
                         g = g - (w * white_g)
                         b = b - (w * white_b)
+                        
+                        # Add target temperature compensation to RGB
+                        # This shifts the color towards the target temperature
+                        if temp_diff_factor > 0.01:  # Only if there's a significant difference
+                            rgb_compensation = min_val * (1.0 - w_usage)
+                            target_max = max(target_r, target_g, target_b)
+                            if target_max > 0:
+                                target_r /= target_max
+                                target_g /= target_max
+                                target_b /= target_max
+                            r = r + (rgb_compensation * target_r)
+                            g = g + (rgb_compensation * target_g)
+                            b = b + (rgb_compensation * target_b)
                         
                         # Clamp to valid range
                         r = max(0.0, r)
@@ -586,6 +631,7 @@ if pi_version == 5:
             b8 = int(b * brightness * 255)
             w8 = int(w * brightness * 255)
             
+            # Apply RGB correction (calibrates RGB subpixels to 6500K neutral)
             r8 = scale_8(r8, corr_rgb[0])
             g8 = scale_8(g8, corr_rgb[1])
             b8 = scale_8(b8, corr_rgb[2])
@@ -758,7 +804,7 @@ if pi_version == 5:
                     color = render_hsv2rgb_rainbow_float(values[i - start], corr_rgb, saturation, brightness, has_white)
                     channel.setPixelColor(i, color)
         
-        def ws2811_rgb_render_range_float(channel, values, start, end, correction, saturation, brightness, gamma, has_white, white_temp=5000, rgbw_algorithm='legacy'):
+        def ws2811_rgb_render_range_float(channel, values, start, end, correction, saturation, brightness, gamma, has_white, white_temp=5000, rgbw_algorithm='legacy', target_temp=6500):
             """Render RGB values to a range of LEDs - vectorized version for better performance"""
             if channel is None or end > channel.numPixels():
                 return
@@ -782,13 +828,20 @@ if pi_version == 5:
                 if has_white:
                     if rgbw_algorithm == 'advanced':
                         # Advanced algorithm: Extract minimum RGB value to white channel
+                        # and compensate for white LED color temperature to match target
                         min_vals = np.minimum(np.minimum(r, g), b)
                         
                         # Only process pixels with non-zero minimum
                         mask_has_min = min_vals > 0
                         if np.any(mask_has_min):
-                            # Get white LED color as RGB
+                            # Get target color and white LED color as RGB
+                            target_rgb = color_temp_to_rgb(target_temp)
                             white_rgb = color_temp_to_rgb(white_temp)
+                            
+                            # Normalize to 0-1 range
+                            target_r = target_rgb[0] / 255.0
+                            target_g = target_rgb[1] / 255.0
+                            target_b = target_rgb[2] / 255.0
                             white_r = white_rgb[0] / 255.0
                             white_g = white_rgb[1] / 255.0
                             white_b = white_rgb[2] / 255.0
@@ -800,11 +853,29 @@ if pi_version == 5:
                                 white_g /= white_max
                                 white_b /= white_max
                             
-                            # Extract white and compensate RGB
-                            w[mask_has_min] = min_vals[mask_has_min]
+                            # Calculate color temperature difference factor
+                            temp_diff_factor = abs(white_temp - target_temp) / max(white_temp, target_temp)
+                            w_usage = 1.0 - min(1.0, temp_diff_factor * 2.0)
+                            
+                            # Extract white with adjusted amount
+                            w[mask_has_min] = min_vals[mask_has_min] * w_usage
+                            
+                            # Compensate RGB for white LED color
                             r[mask_has_min] = r[mask_has_min] - (w[mask_has_min] * white_r)
                             g[mask_has_min] = g[mask_has_min] - (w[mask_has_min] * white_g)
                             b[mask_has_min] = b[mask_has_min] - (w[mask_has_min] * white_b)
+                            
+                            # Add target temperature compensation to RGB
+                            if temp_diff_factor > 0.01:
+                                rgb_compensation = min_vals[mask_has_min] * (1.0 - w_usage)
+                                target_max = max(target_r, target_g, target_b)
+                                if target_max > 0:
+                                    target_r /= target_max
+                                    target_g /= target_max
+                                    target_b /= target_max
+                                r[mask_has_min] = r[mask_has_min] + (rgb_compensation * target_r)
+                                g[mask_has_min] = g[mask_has_min] + (rgb_compensation * target_g)
+                                b[mask_has_min] = b[mask_has_min] + (rgb_compensation * target_b)
                             
                             # Clamp to valid range
                             r = np.maximum(0.0, r)
@@ -880,7 +951,7 @@ if pi_version == 5:
                 # Fall back to non-vectorized version
                 corr_rgb = unpack_rgb(correction)
                 for i in range(start, end):
-                    color = render_rgb_float(values[i - start], corr_rgb, saturation, brightness, has_white, white_temp, rgbw_algorithm)
+                    color = render_rgb_float(values[i - start], corr_rgb, saturation, brightness, has_white, white_temp, rgbw_algorithm, target_temp)
                     channel.setPixelColor(i, color)
         
         def ws2811_rgb_render_calibration(strip, channel, count, correction, brightness):
@@ -1056,7 +1127,7 @@ elif pi_version == 3:
                 else:
                     return ((r8 & 0xFF) << 16) | ((g8 & 0xFF) << 8) | (b8 & 0xFF)
             
-            def render_rgb_float(rgb, corr_rgb, saturation, brightness, has_white):
+            def render_rgb_float(rgb, corr_rgb, saturation, brightness, has_white, white_temp=5000, rgbw_algorithm='legacy', target_temp=6500):
                 """Convert RGB float to packed RGBW"""
                 r = clamp(rgb[0], 0.0, 1.0)
                 g = clamp(rgb[1], 0.0, 1.0)
@@ -1065,7 +1136,71 @@ elif pi_version == 3:
                 sat = int(saturation * 255)
                 
                 if has_white:
-                    max_val = max(r, g, b)
+                    if rgbw_algorithm == 'advanced':
+                        # Advanced algorithm with target temperature support
+                        min_val = min(r, g, b)
+                        
+                        if min_val > 0:
+                            # Get target and white LED colors
+                            target_rgb = color_temp_to_rgb(target_temp)
+                            white_rgb = color_temp_to_rgb(white_temp)
+                            
+                            target_r = target_rgb[0] / 255.0
+                            target_g = target_rgb[1] / 255.0
+                            target_b = target_rgb[2] / 255.0
+                            white_r = white_rgb[0] / 255.0
+                            white_g = white_rgb[1] / 255.0
+                            white_b = white_rgb[2] / 255.0
+                            
+                            # Normalize white color
+                            white_max = max(white_r, white_g, white_b)
+                            if white_max > 0:
+                                white_r /= white_max
+                                white_g /= white_max
+                                white_b /= white_max
+                            
+                            # Calculate temperature difference
+                            temp_diff_factor = abs(white_temp - target_temp) / max(white_temp, target_temp)
+                            w_usage = 1.0 - min(1.0, temp_diff_factor * 2.0)
+                            
+                            # Extract white
+                            w = min_val * w_usage
+                            r = r - (w * white_r)
+                            g = g - (w * white_g)
+                            b = b - (w * white_b)
+                            
+                            # Add target temperature compensation
+                            if temp_diff_factor > 0.01:
+                                rgb_compensation = min_val * (1.0 - w_usage)
+                                target_max = max(target_r, target_g, target_b)
+                                if target_max > 0:
+                                    target_r /= target_max
+                                    target_g /= target_max
+                                    target_b /= target_max
+                                r = r + (rgb_compensation * target_r)
+                                g = g + (rgb_compensation * target_g)
+                                b = b + (rgb_compensation * target_b)
+                            
+                            r = max(0.0, r)
+                            g = max(0.0, g)
+                            b = max(0.0, b)
+                        
+                        # Apply saturation
+                        if sat != 255:
+                            if sat == 0:
+                                avg = (r + g + b) / 3.0
+                                r, g, b = 0, 0, 0
+                                w = avg + w
+                            else:
+                                avg = (r + g + b) / 3.0
+                                desat_factor = (255 - sat) / 255.0
+                                r = r * (sat / 255.0) + avg * desat_factor
+                                g = g * (sat / 255.0) + avg * desat_factor
+                                b = b * (sat / 255.0) + avg * desat_factor
+                                w = w + (avg * desat_factor * desat_factor)
+                    else:
+                        # Legacy algorithm
+                        max_val = max(r, g, b)
                     if sat == 0:
                         r, g, b = 0, 0, 0
                         min_val = max_val
@@ -1108,13 +1243,13 @@ elif pi_version == 3:
                     color = render_hsv2rgb_rainbow_float(values[i - start], corr_rgb, saturation, brightness, has_white)
                     channel.setPixelColor(i, color)
             
-            def ws2811_rgb_render_range_float(channel, values, start, end, correction, saturation, brightness, gamma, has_white):
+            def ws2811_rgb_render_range_float(channel, values, start, end, correction, saturation, brightness, gamma, has_white, white_temp=5000, rgbw_algorithm='legacy', target_temp=6500):
                 """Render RGB values to a range of LEDs"""
                 if channel is None:
                     return
                 corr_rgb = unpack_rgb(correction)
                 for i in range(start, end):
-                    color = render_rgb_float(values[i - start], corr_rgb, saturation, brightness, has_white)
+                    color = render_rgb_float(values[i - start], corr_rgb, saturation, brightness, has_white, white_temp, rgbw_algorithm, target_temp)
                     channel.setPixelColor(i, color)
             
             def ws2811_rgb_render_calibration(strip, channel, count, correction, brightness):
