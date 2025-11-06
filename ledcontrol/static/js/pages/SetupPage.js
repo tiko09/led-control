@@ -10,6 +10,7 @@ export default {
   data() {
     return {
       calibration: store.get('calibration'),
+      useWhiteChannel: store.get('use_white_channel'),
       groupListKey: 0,
       logLevel: 'INFO',
       logLevels: ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
@@ -19,11 +20,17 @@ export default {
   computed: {
     groups: function() {
       return store.get('groups');
+    },
+    ledStripType: function() {
+      return store.get('led_strip_type');
     }
   },
   methods: {
     updateCalibration() {
       store.set('calibration', parseInt(this.calibration, 10));
+    },
+    updateWhiteChannel() {
+      store.set('use_white_channel', this.useWhiteChannel);
     },
     async addGroup(key) {
       await store.createGroup(key);
@@ -123,6 +130,35 @@ export default {
               <option value="0">Off</option>
               <option value="1">On</option>
             </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- RGBW Settings Card -->
+      <div class="card" v-if="ledStripType.includes('W')">
+        <div class="card-header">
+          <div class="card-header-left">
+            <svg class="card-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83"></path>
+              <circle cx="12" cy="12" r="3"></circle>
+            </svg>
+            <h2 class="card-title">RGBW Settings</h2>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="input-group">
+            <label class="input-label">
+              Use White Channel in Animations
+              <span class="input-hint">Enable to use the dedicated white LED during pattern animations. When enabled, colors with low saturation will activate the white channel for better color accuracy and efficiency.</span>
+            </label>
+            <label class="switch">
+              <input
+                type="checkbox"
+                v-model="useWhiteChannel"
+                @change="updateWhiteChannel"
+              />
+              <span class="slider-switch"></span>
+            </label>
           </div>
         </div>
       </div>

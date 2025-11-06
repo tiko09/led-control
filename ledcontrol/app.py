@@ -198,6 +198,8 @@ def create_app(led_count,
         "artnet_spatial_smoothing": "none",   # "none", "average", "lerp"
         "artnet_spatial_size": 1,             # Fenstergröße (z.B. 1=aus, 3=3er-Glättung)
         "log_level": "INFO",  # NEU: Logging-Level
+        "use_white_channel": True,  # RGBW: Use white LED in animations
+        "led_strip_type": led_pixel_order,  # Store LED strip type for frontend
     }
     for k, v in config_defaults.items():
         settings.setdefault(k, v)
