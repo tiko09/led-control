@@ -78,10 +78,12 @@ if sys.platform.startswith('linux'):
 
 # Add Raspberry Pi specific LED drivers
 if pi_version == 5:
-    # Raspberry Pi 5: Use SPI-based driver
-    requirements.append('rpi5-ws2812')
-    requirements.append('spidev')  # For direct SPI access (RGBW support)
-    print("Detected Raspberry Pi 5 - will use rpi5-ws2812 driver (SPI-based) with RGBW support")
+    # Raspberry Pi 5: Use our RGBW-capable fork from submodule
+    # The submodule at ledcontrol/driver/rpi5-ws2812-rgbw should be checked out
+    # Install it with: pip install -e ledcontrol/driver/rpi5-ws2812-rgbw
+    # Note: spidev and numpy are dependencies of rpi5-ws2812-rgbw, will be installed automatically
+    print("Detected Raspberry Pi 5 - using rpi5-ws2812-rgbw driver from submodule (SPI-based, RGBW-capable)")
+    print("Make sure to install the submodule driver: pip install -e ledcontrol/driver/rpi5-ws2812-rgbw")
 elif pi_version == 3:
     # Raspberry Pi 3/4: Use PWM-based driver
     requirements.append('rpi_ws281x')
