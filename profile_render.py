@@ -103,43 +103,19 @@ def profile_render_loop(num_frames=300):
     # Timing storage
     timings = defaultdict(list)
     
-    # Monkey-patch render functions to add timing
-    original_render_frame = animation_controller.render_frame
+    # Monkey-patch methods to add timing
+    original_update_leds = animation_controller.update_leds
     
-    def timed_render_frame():
+    def timed_update_leds():
         t0 = time.perf_counter()
-        result = original_render_frame()
+        result = original_update_leds()
         t1 = time.perf_counter()
-        timings['render_frame'].append(t1 - t0)
+        timings['update_leds'].append(t1 - t0)
         return result
     
-    animation_controller.render_frame = timed_render_frame
+    animation_controller.update_leds = timed_update_leds
     
-    # Also patch the LED controller's render function
-    if hasattr(led_controller, 'render_hsv'):
-        original_render_hsv = led_controller.render_hsv
-        
-        def timed_render_hsv(*args, **kwargs):
-            t0 = time.perf_counter()
-            result = original_render_hsv(*args, **kwargs)
-            t1 = time.perf_counter()
-            timings['render_hsv'].append(t1 - t0)
-            return result
-        
-        led_controller.render_hsv = timed_render_hsv
-    
-    if hasattr(led_controller, 'render_rgb'):
-        original_render_rgb = led_controller.render_rgb
-        
-        def timed_render_rgb(*args, **kwargs):
-            t0 = time.perf_counter()
-            result = original_render_rgb(*args, **kwargs)
-            t1 = time.perf_counter()
-            timings['render_rgb'].append(t1 - t0)
-            return result
-        
-        led_controller.render_rgb = timed_render_rgb
-    
+    # Also patch the LED controller's show function
     if hasattr(led_controller, 'show'):
         original_show = led_controller.show
         
@@ -152,19 +128,25 @@ def profile_render_loop(num_frames=300):
         
         led_controller.show = timed_show
     
-    # Run frames manually
+    # Start the animation controller
+    animation_controller.start()
+    
+    # Run frames manually by calling update_leds
     start_time = time.perf_counter()
     
     for i in range(num_frames):
         frame_start = time.perf_counter()
         
-        animation_controller.render_frame()
+        animation_controller.update_leds()
         
         frame_end = time.perf_counter()
         timings['total_frame'].append(frame_end - frame_start)
         
         if (i + 1) % 100 == 0:
             print(f"  Rendered {i + 1}/{num_frames} frames...")
+    
+    # Stop the animation controller
+    animation_controller.stop()
     
     end_time = time.perf_counter()
     total_duration = end_time - start_time
@@ -183,7 +165,7 @@ def profile_render_loop(num_frames=300):
     print(f"{'Operation':<30} {'Avg (ms)':<12} {'Min (ms)':<12} {'Max (ms)':<12} {'Total %':<10}")
     print("-" * 80)
     
-    for key in ['total_frame', 'render_frame', 'render_hsv', 'render_rgb', 'show']:
+    for key in ['total_frame', 'update_leds', 'show']:
         if key in timings and timings[key]:
             values = np.array(timings[key]) * 1000  # Convert to ms
             avg = np.mean(values)
@@ -217,7 +199,7 @@ def profile_render_loop(num_frames=300):
     max_time = 0
     bottleneck = None
     
-    for key in ['render_hsv', 'render_rgb', 'show']:
+    for key in ['update_leds', 'show']:
         if key in timings and timings[key]:
             avg_time = np.mean(timings[key]) * 1000
             if avg_time > max_time:
@@ -235,13 +217,14 @@ def profile_render_loop(num_frames=300):
             print("  - Reduce LED count")
             print("  - Use hardware DMA (requires C implementation)")
         
-        elif bottleneck in ['render_hsv', 'render_rgb']:
+        elif bottleneck == 'update_leds':
             print(f"\nThe '{bottleneck}' function is the bottleneck.")
-            print("Despite NumPy vectorization, Python overhead is still significant.")
+            print("This includes animation calculation and rendering.")
             print("Possible solutions:")
-            print("  - Implement render function in Cython (50-100x faster)")
-            print("  - Implement render function in C (maximum speed)")
+            print("  - Implement render functions in Cython (50-100x faster)")
+            print("  - Implement render functions in C (maximum speed)")
             print("  - Use PyPy JIT compiler")
+            print("  - Profile deeper to find specific slow parts in update_leds()")
 
 
 if __name__ == '__main__':
