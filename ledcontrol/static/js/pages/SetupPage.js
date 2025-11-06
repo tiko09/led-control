@@ -11,6 +11,8 @@ export default {
     return {
       calibration: store.get('calibration'),
       useWhiteChannel: store.get('use_white_channel'),
+      whiteLedTemperature: store.get('white_led_temperature'),
+      rgbwAlgorithm: store.get('rgbw_algorithm'),
       groupListKey: 0,
       logLevel: 'INFO',
       logLevels: ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
@@ -31,6 +33,12 @@ export default {
     },
     updateWhiteChannel() {
       store.set('use_white_channel', this.useWhiteChannel);
+    },
+    updateWhiteLedTemperature() {
+      store.set('white_led_temperature', parseInt(this.whiteLedTemperature, 10));
+    },
+    updateRgbwAlgorithm() {
+      store.set('rgbw_algorithm', this.rgbwAlgorithm);
     },
     async addGroup(key) {
       await store.createGroup(key);
@@ -159,6 +167,42 @@ export default {
               />
               <span class="slider-switch"></span>
             </label>
+          </div>
+
+          <div class="input-group" v-if="useWhiteChannel">
+            <label class="input-label">
+              RGBW Algorithm
+              <span class="input-hint">Legacy: Uses desaturation (current). Advanced: Extracts white from RGB colors for better efficiency.</span>
+            </label>
+            <select 
+              v-model="rgbwAlgorithm" 
+              @change="updateRgbwAlgorithm"
+              class="input-select"
+            >
+              <option value="legacy">Legacy (Desaturation)</option>
+              <option value="advanced">Advanced (White Extraction)</option>
+            </select>
+          </div>
+
+          <div class="input-group" v-if="useWhiteChannel && rgbwAlgorithm === 'advanced'">
+            <label class="input-label">
+              White LED Color Temperature
+              <span class="input-hint">Set the color temperature of your white LEDs ({{ whiteLedTemperature }}K). Warmer whites (2700K-3500K) have more red/yellow, cooler whites (5000K-6500K) are more blue. This helps the algorithm accurately convert RGB to RGBW.</span>
+            </label>
+            <input
+              type="range"
+              v-model="whiteLedTemperature"
+              @input="updateWhiteLedTemperature"
+              min="2700"
+              max="6500"
+              step="100"
+              class="slider"
+            />
+            <div style="display: flex; justify-content: space-between; font-size: 0.85em; color: var(--text-secondary); margin-top: 4px;">
+              <span>2700K (Warm)</span>
+              <span>4000K (Neutral)</span>
+              <span>6500K (Cool)</span>
+            </div>
           </div>
         </div>
       </div>

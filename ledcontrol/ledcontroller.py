@@ -128,19 +128,22 @@ class LEDController:
 
     def set_range(self, pixels, start, end,
                   correction, saturation, brightness, color_mode,
-                  render_mode, render_target, use_white_channel=True):
+                  render_mode, render_target, use_white_channel=True, 
+                  white_temp=5000, rgbw_algorithm='legacy'):
         if render_mode == TargetMode.local:
             if driver.is_raspberrypi():
                 if color_mode == animfunctions.ColorMode.hsv:
                     driver.ws2811_hsv_render_range_float(self._channel, pixels,
                                                          start, end,
                                                          correction, saturation,  brightness, 1.0,
-                                                         self._has_white and use_white_channel)
+                                                         self._has_white and use_white_channel,
+                                                         white_temp, rgbw_algorithm)
                 else:
                     driver.ws2811_rgb_render_range_float(self._channel, pixels,
                                                          start, end,
                                                          correction, saturation,  brightness, 1.0,
-                                                         self._has_white and use_white_channel)
+                                                         self._has_white and use_white_channel,
+                                                         white_temp, rgbw_algorithm)
         else:
             # Convert to numpy array directly (faster than fromiter + chain)
             data = np.array(pixels, dtype=np.float32).ravel()

@@ -380,6 +380,44 @@ if pi_version == 5:
             if strip is not None:
                 ws2811_fini(strip)
         
+        # Color temperature to RGB conversion (approximation)
+        def color_temp_to_rgb(kelvin):
+            """
+            Convert color temperature in Kelvin to RGB values (0-255)
+            Based on Tanner Helland's algorithm
+            """
+            temp = kelvin / 100.0
+            
+            # Red
+            if temp <= 66:
+                r = 255
+            else:
+                r = temp - 60
+                r = 329.698727446 * (r ** -0.1332047592)
+                r = max(0, min(255, r))
+            
+            # Green
+            if temp <= 66:
+                g = temp
+                g = 99.4708025861 * (g ** 0.07551484922) - 161.1195681661
+            else:
+                g = temp - 60
+                g = 288.1221695283 * (g ** -0.0755148492)
+            g = max(0, min(255, g))
+            
+            # Blue
+            if temp >= 66:
+                b = 255
+            else:
+                if temp <= 19:
+                    b = 0
+                else:
+                    b = temp - 10
+                    b = 138.5177312231 * (b ** 0.0767114632) - 305.0447927307
+                    b = max(0, min(255, b))
+            
+            return (int(r), int(g), int(b))
+        
         # HSV to RGB conversion (FastLED Rainbow algorithm)
         def render_hsv2rgb_rainbow_float(hsv, corr_rgb, saturation, brightness, has_white):
             """Convert HSV to RGB using FastLED's rainbow algorithm"""
@@ -457,7 +495,7 @@ if pi_version == 5:
             return pack_rgbw(r, g, b, w)
         
         # RGB rendering
-        def render_rgb_float(rgb, corr_rgb, saturation, brightness, has_white):
+        def render_rgb_float(rgb, corr_rgb, saturation, brightness, has_white, white_temp=5000, rgbw_algorithm='legacy'):
             """Convert RGB float to packed RGBW"""
             r = clamp(rgb[0], 0.0, 1.0)
             g = clamp(rgb[1], 0.0, 1.0)
@@ -466,19 +504,66 @@ if pi_version == 5:
             sat = int(saturation * 255)
             
             if has_white:
-                max_val = max(r, g, b)
-                if sat == 0:
-                    r, g, b = 0, 0, 0
-                    min_val = max_val
-                else:
-                    r = (r - max_val) * saturation + max_val
-                    g = (g - max_val) * saturation + max_val
-                    b = (b - max_val) * saturation + max_val
+                if rgbw_algorithm == 'advanced':
+                    # Advanced algorithm: Extract minimum RGB value to white channel
+                    # and compensate for white LED color temperature
                     min_val = min(r, g, b)
-                    r -= min_val
-                    g -= min_val
-                    b -= min_val
-                w = min_val * min_val
+                    
+                    if min_val > 0:
+                        # Get white LED color as RGB
+                        white_r, white_g, white_b = color_temp_to_rgb(white_temp)
+                        white_r /= 255.0
+                        white_g /= 255.0
+                        white_b /= 255.0
+                        
+                        # Normalize white color
+                        white_max = max(white_r, white_g, white_b)
+                        if white_max > 0:
+                            white_r /= white_max
+                            white_g /= white_max
+                            white_b /= white_max
+                        
+                        # Extract white and compensate RGB
+                        w = min_val
+                        r = r - (w * white_r)
+                        g = g - (w * white_g)
+                        b = b - (w * white_b)
+                        
+                        # Clamp to valid range
+                        r = max(0.0, r)
+                        g = max(0.0, g)
+                        b = max(0.0, b)
+                    
+                    # Apply saturation to white channel
+                    if sat != 255:
+                        if sat == 0:
+                            # Full desaturation: all white
+                            avg = (r + g + b) / 3.0
+                            r, g, b = 0, 0, 0
+                            w = avg + w
+                        else:
+                            # Partial desaturation
+                            avg = (r + g + b) / 3.0
+                            desat_factor = (255 - sat) / 255.0
+                            r = r * (sat / 255.0) + avg * desat_factor
+                            g = g * (sat / 255.0) + avg * desat_factor
+                            b = b * (sat / 255.0) + avg * desat_factor
+                            w = w + (avg * desat_factor * desat_factor)
+                else:
+                    # Legacy algorithm: Uses desaturation
+                    max_val = max(r, g, b)
+                    if sat == 0:
+                        r, g, b = 0, 0, 0
+                        min_val = max_val
+                    else:
+                        r = (r - max_val) * saturation + max_val
+                        g = (g - max_val) * saturation + max_val
+                        b = (b - max_val) * saturation + max_val
+                        min_val = min(r, g, b)
+                        r -= min_val
+                        g -= min_val
+                        b -= min_val
+                    w = min_val * min_val
             else:
                 if sat != 255:
                     avg = (r + g + b) / 3.0
@@ -501,7 +586,7 @@ if pi_version == 5:
             return pack_rgbw(r8, g8, b8, w8)
         
         # Render functions
-        def ws2811_hsv_render_range_float(channel, values, start, end, correction, saturation, brightness, gamma, has_white):
+        def ws2811_hsv_render_range_float(channel, values, start, end, correction, saturation, brightness, gamma, has_white, white_temp=5000, rgbw_algorithm='legacy'):
             """Render HSV values to a range of LEDs"""
             if channel is None or end > channel.numPixels():
                 return
@@ -510,13 +595,13 @@ if pi_version == 5:
                 color = render_hsv2rgb_rainbow_float(values[i - start], corr_rgb, saturation, brightness, has_white)
                 channel.setPixelColor(i, color)
         
-        def ws2811_rgb_render_range_float(channel, values, start, end, correction, saturation, brightness, gamma, has_white):
+        def ws2811_rgb_render_range_float(channel, values, start, end, correction, saturation, brightness, gamma, has_white, white_temp=5000, rgbw_algorithm='legacy'):
             """Render RGB values to a range of LEDs"""
             if channel is None or end > channel.numPixels():
                 return
             corr_rgb = unpack_rgb(correction)
             for i in range(start, end):
-                color = render_rgb_float(values[i - start], corr_rgb, saturation, brightness, has_white)
+                color = render_rgb_float(values[i - start], corr_rgb, saturation, brightness, has_white, white_temp, rgbw_algorithm)
                 channel.setPixelColor(i, color)
         
         def ws2811_rgb_render_calibration(strip, channel, count, correction, brightness):

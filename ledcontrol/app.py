@@ -158,6 +158,8 @@ def create_app(led_count,
             
             # Add app-level settings to controller settings
             settings['settings']['use_white_channel'] = settings.get('use_white_channel', True)
+            settings['settings']['white_led_temperature'] = settings.get('white_led_temperature', 5000)
+            settings['settings']['rgbw_algorithm'] = settings.get('rgbw_algorithm', 'legacy')
 
             # Set controller settings, (automatically) recalculate things that depend on them
             controller.update_settings(settings['settings'])
@@ -202,6 +204,8 @@ def create_app(led_count,
         "artnet_spatial_size": 1,             # Fenstergröße (z.B. 1=aus, 3=3er-Glättung)
         "log_level": "INFO",  # NEU: Logging-Level
         "use_white_channel": True,  # RGBW: Use white LED in animations
+        "white_led_temperature": 5000,  # RGBW: White LED color temperature in Kelvin (2700-6500)
+        "rgbw_algorithm": "legacy",  # RGBW: Algorithm for RGB->RGBW conversion ("legacy" or "advanced")
         "led_strip_type": led_pixel_order,  # Store LED strip type for frontend
     }
     for k, v in config_defaults.items():
@@ -325,6 +329,8 @@ def create_app(led_count,
         controller_settings = controller.get_settings()
         # Add app-level settings that frontend needs
         controller_settings['use_white_channel'] = settings.get('use_white_channel', True)
+        controller_settings['white_led_temperature'] = settings.get('white_led_temperature', 5000)
+        controller_settings['rgbw_algorithm'] = settings.get('rgbw_algorithm', 'legacy')
         controller_settings['led_strip_type'] = settings.get('led_strip_type', led_pixel_order)
         return jsonify(controller_settings)
 
@@ -338,6 +344,12 @@ def create_app(led_count,
             settings['use_white_channel'] = new_settings['use_white_channel']
             # Also update in controller settings so it's available during rendering
             controller.update_settings({'use_white_channel': new_settings['use_white_channel']})
+        if 'white_led_temperature' in new_settings:
+            settings['white_led_temperature'] = new_settings['white_led_temperature']
+            controller.update_settings({'white_led_temperature': new_settings['white_led_temperature']})
+        if 'rgbw_algorithm' in new_settings:
+            settings['rgbw_algorithm'] = new_settings['rgbw_algorithm']
+            controller.update_settings({'rgbw_algorithm': new_settings['rgbw_algorithm']})
         if 'led_strip_type' in new_settings:
             settings['led_strip_type'] = new_settings.pop('led_strip_type')
         

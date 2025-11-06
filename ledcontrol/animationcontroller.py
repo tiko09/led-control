@@ -399,7 +399,9 @@ class AnimationController:
                         mode,
                         settings['render_mode'],
                         settings['render_target'],
-                        self._settings.get('use_white_channel', True)
+                        self._settings.get('use_white_channel', True),
+                        self._settings.get('white_led_temperature', 5000),
+                        self._settings.get('rgbw_algorithm', 'legacy')
                     )
 
                 except Exception as e:
@@ -415,7 +417,9 @@ class AnimationController:
                         animfunctions.ColorMode.rgb,
                         settings['render_mode'],
                         settings['render_target'],
-                        self._settings.get('use_white_channel', True)
+                        self._settings.get('use_white_channel', True),
+                        self._settings.get('white_led_temperature', 5000),
+                        self._settings.get('rgbw_algorithm', 'legacy')
                     )
                     self._led_controller.render()
                     return
