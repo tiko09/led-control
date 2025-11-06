@@ -61,7 +61,7 @@ def profile_animation(duration=10):
     
     # For AnimationController, we need to extract the right parameters
     refresh_rate = config.get('frame_rate', 60)
-    led_brightness_limit = config.get('brightness_limit', 1.0)
+    global_brightness_limit = config.get('brightness_limit', 1.0)
     
     # Import pixelmappings
     import ledcontrol.pixelmappings as pixelmappings
@@ -73,7 +73,7 @@ def profile_animation(duration=10):
         led_count,
         mapping_func,
         no_timer_reset=False,
-        global_brightness_limit=led_brightness_limit
+        global_brightness_limit=global_brightness_limit
     )
     
     # Load controller settings from config
