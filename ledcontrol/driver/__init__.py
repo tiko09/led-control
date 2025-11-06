@@ -185,6 +185,9 @@ if pi_version == 5:
         from rpi5_ws2812.ws2812 import Color, WS2812SpiDriver as _WS2812SpiDriver
         print("Using rpi5-ws2812-rgbw driver for Raspberry Pi 5 (SPI-based, RGBW-capable)")
         
+        # Import NumPy for vectorized operations
+        import numpy as np
+        
         # Strip type constants (compatible with rpi_ws281x)
         WS2811_STRIP_RGB = 0x00100800
         WS2811_STRIP_RBG = 0x00100008
@@ -587,22 +590,282 @@ if pi_version == 5:
         
         # Render functions
         def ws2811_hsv_render_range_float(channel, values, start, end, correction, saturation, brightness, gamma, has_white, white_temp=5000, rgbw_algorithm='legacy'):
-            """Render HSV values to a range of LEDs"""
+            """Render HSV values to a range of LEDs - vectorized version for better performance"""
             if channel is None or end > channel.numPixels():
                 return
-            corr_rgb = unpack_rgb(correction)
-            for i in range(start, end):
-                color = render_hsv2rgb_rainbow_float(values[i - start], corr_rgb, saturation, brightness, has_white)
-                channel.setPixelColor(i, color)
+            
+            # Try vectorized approach if values is already a numpy array or list
+            try:
+                # Convert to numpy array for vectorized operations
+                hsv_array = np.array(values, dtype=np.float32)
+                if len(hsv_array.shape) == 1:
+                    # Single pixel, fall back to loop
+                    raise ValueError("Single pixel")
+                
+                # Vectorized HSV to RGB conversion (FastLED Rainbow algorithm)
+                hue_float = hsv_array[:, 0] % 1.0
+                sat_float = hsv_array[:, 1] * saturation
+                val_float = hsv_array[:, 2] * hsv_array[:, 2]  # Square for gamma
+                
+                # Convert to uint8
+                hue = (hue_float * 255).astype(np.uint8)
+                sat = (sat_float * 255).astype(np.uint8)
+                val = (val_float * 255).astype(np.uint16)
+                
+                # Apply brightness
+                val = np.where((val > 0) & (val < 255), val + 1, val)
+                val = (val * int(brightness * 255)) >> 8
+                val = val.astype(np.uint8)
+                
+                # Initialize RGB arrays
+                r = np.zeros(len(hue), dtype=np.uint8)
+                g = np.zeros(len(hue), dtype=np.uint8)
+                b = np.zeros(len(hue), dtype=np.uint8)
+                w = np.zeros(len(hue), dtype=np.uint8)
+                
+                # FastLED Rainbow algorithm (vectorized as much as possible)
+                # This is still complex, but we batch the bit operations
+                offset = hue & 0x1F
+                offset8 = offset << 3
+                third = offset8 // 3
+                
+                # Masks for different hue ranges
+                mask_80 = (hue & 0x80) == 0
+                mask_40 = (hue & 0x40) == 0
+                mask_20 = (hue & 0x20) == 0
+                
+                # Apply color transforms based on masks
+                # Quadrant 0 (hue < 128)
+                m = mask_80 & mask_40 & mask_20
+                r[m] = 255 - third[m]
+                g[m] = third[m]
+                b[m] = 0
+                
+                m = mask_80 & mask_40 & ~mask_20
+                r[m] = 171
+                g[m] = 85 + third[m]
+                b[m] = 0
+                
+                m = mask_80 & ~mask_40 & mask_20
+                r[m] = 171 - third[m] * 2
+                g[m] = 170 + third[m]
+                b[m] = 0
+                
+                m = mask_80 & ~mask_40 & ~mask_20
+                r[m] = 0
+                g[m] = 255 - third[m]
+                b[m] = third[m]
+                
+                # Quadrant 1 (hue >= 128)
+                m = ~mask_80 & mask_40 & mask_20
+                twothirds = third[m] * 2
+                r[m] = 0
+                g[m] = 171 - twothirds
+                b[m] = 85 + twothirds
+                
+                m = ~mask_80 & mask_40 & ~mask_20
+                r[m] = third[m]
+                g[m] = 0
+                b[m] = 255 - third[m]
+                
+                m = ~mask_80 & ~mask_40 & mask_20
+                r[m] = 85 + third[m]
+                g[m] = 0
+                b[m] = 171 - third[m]
+                
+                m = ~mask_80 & ~mask_40 & ~mask_20
+                r[m] = 170 + third[m]
+                g[m] = 0
+                b[m] = 85 - third[m]
+                
+                # Handle white channel for RGBW
+                if has_white:
+                    mask_desat = sat != 255
+                    mask_zero_sat = sat == 0
+                    
+                    # Full desaturation
+                    r[mask_zero_sat] = 0
+                    g[mask_zero_sat] = 0
+                    b[mask_zero_sat] = 0
+                    w[mask_zero_sat] = 255
+                    
+                    # Partial desaturation
+                    mask_partial = mask_desat & ~mask_zero_sat
+                    if np.any(mask_partial):
+                        desat = 255 - sat[mask_partial]
+                        desat = ((desat.astype(np.uint16) * desat.astype(np.uint16)) >> 8).astype(np.uint8)
+                        r[mask_partial] = ((r[mask_partial].astype(np.uint16) * sat[mask_partial]) >> 8).astype(np.uint8)
+                        g[mask_partial] = ((g[mask_partial].astype(np.uint16) * sat[mask_partial]) >> 8).astype(np.uint8)
+                        b[mask_partial] = ((b[mask_partial].astype(np.uint16) * sat[mask_partial]) >> 8).astype(np.uint8)
+                        w[mask_partial] = desat
+                else:
+                    # RGB mode desaturation
+                    mask_desat = sat != 255
+                    mask_zero_sat = sat == 0
+                    
+                    r[mask_zero_sat] = 255
+                    g[mask_zero_sat] = 255
+                    b[mask_zero_sat] = 255
+                    
+                    mask_partial = mask_desat & ~mask_zero_sat
+                    if np.any(mask_partial):
+                        desat = 255 - sat[mask_partial]
+                        desat = ((desat.astype(np.uint16) * desat.astype(np.uint16)) >> 8).astype(np.uint8)
+                        r[mask_partial] = ((r[mask_partial].astype(np.uint16) * sat[mask_partial]) >> 8).astype(np.uint8) + desat
+                        g[mask_partial] = ((g[mask_partial].astype(np.uint16) * sat[mask_partial]) >> 8).astype(np.uint8) + desat
+                        b[mask_partial] = ((b[mask_partial].astype(np.uint16) * sat[mask_partial]) >> 8).astype(np.uint8) + desat
+                
+                # Apply value (brightness)
+                mask_zero_val = val == 0
+                mask_nonzero_val = (val != 0) & (val != 255)
+                
+                r[mask_zero_val] = 0
+                g[mask_zero_val] = 0
+                b[mask_zero_val] = 0
+                w[mask_zero_val] = 0
+                
+                if np.any(mask_nonzero_val):
+                    r[mask_nonzero_val] = ((r[mask_nonzero_val].astype(np.uint16) * val[mask_nonzero_val]) >> 8).astype(np.uint8)
+                    g[mask_nonzero_val] = ((g[mask_nonzero_val].astype(np.uint16) * val[mask_nonzero_val]) >> 8).astype(np.uint8)
+                    b[mask_nonzero_val] = ((b[mask_nonzero_val].astype(np.uint16) * val[mask_nonzero_val]) >> 8).astype(np.uint8)
+                    w[mask_nonzero_val] = ((w[mask_nonzero_val].astype(np.uint16) * val[mask_nonzero_val]) >> 8).astype(np.uint8)
+                
+                # Apply color correction
+                corr_rgb = unpack_rgb(correction)
+                r = ((r.astype(np.uint16) * corr_rgb[0]) >> 8).astype(np.uint8)
+                g = ((g.astype(np.uint16) * corr_rgb[1]) >> 8).astype(np.uint8)
+                b = ((b.astype(np.uint16) * corr_rgb[2]) >> 8).astype(np.uint8)
+                
+                # Batch set pixels
+                for i, (ri, gi, bi, wi) in enumerate(zip(r, g, b, w)):
+                    color = pack_rgbw(int(ri), int(gi), int(bi), int(wi))
+                    channel.setPixelColor(start + i, color)
+                    
+            except (ValueError, AttributeError, TypeError):
+                # Fall back to non-vectorized version
+                corr_rgb = unpack_rgb(correction)
+                for i in range(start, end):
+                    color = render_hsv2rgb_rainbow_float(values[i - start], corr_rgb, saturation, brightness, has_white)
+                    channel.setPixelColor(i, color)
         
         def ws2811_rgb_render_range_float(channel, values, start, end, correction, saturation, brightness, gamma, has_white, white_temp=5000, rgbw_algorithm='legacy'):
-            """Render RGB values to a range of LEDs"""
+            """Render RGB values to a range of LEDs - vectorized version for better performance"""
             if channel is None or end > channel.numPixels():
                 return
-            corr_rgb = unpack_rgb(correction)
-            for i in range(start, end):
-                color = render_rgb_float(values[i - start], corr_rgb, saturation, brightness, has_white, white_temp, rgbw_algorithm)
-                channel.setPixelColor(i, color)
+            
+            # Try vectorized approach
+            try:
+                # Convert to numpy array for vectorized operations
+                rgb_array = np.array(values, dtype=np.float32)
+                if len(rgb_array.shape) == 1:
+                    # Single pixel, fall back to loop
+                    raise ValueError("Single pixel")
+                
+                # Clamp to 0-1 range
+                r = np.clip(rgb_array[:, 0], 0.0, 1.0)
+                g = np.clip(rgb_array[:, 1], 0.0, 1.0)
+                b = np.clip(rgb_array[:, 2], 0.0, 1.0)
+                w = np.zeros(len(r), dtype=np.float32)
+                
+                sat_int = int(saturation * 255)
+                
+                if has_white:
+                    if rgbw_algorithm == 'advanced':
+                        # Advanced algorithm: Extract minimum RGB value to white channel
+                        min_vals = np.minimum(np.minimum(r, g), b)
+                        
+                        # Only process pixels with non-zero minimum
+                        mask_has_min = min_vals > 0
+                        if np.any(mask_has_min):
+                            # Get white LED color as RGB
+                            white_rgb = color_temp_to_rgb(white_temp)
+                            white_r = white_rgb[0] / 255.0
+                            white_g = white_rgb[1] / 255.0
+                            white_b = white_rgb[2] / 255.0
+                            
+                            # Normalize white color
+                            white_max = max(white_r, white_g, white_b)
+                            if white_max > 0:
+                                white_r /= white_max
+                                white_g /= white_max
+                                white_b /= white_max
+                            
+                            # Extract white and compensate RGB
+                            w[mask_has_min] = min_vals[mask_has_min]
+                            r[mask_has_min] = r[mask_has_min] - (w[mask_has_min] * white_r)
+                            g[mask_has_min] = g[mask_has_min] - (w[mask_has_min] * white_g)
+                            b[mask_has_min] = b[mask_has_min] - (w[mask_has_min] * white_b)
+                            
+                            # Clamp to valid range
+                            r = np.maximum(0.0, r)
+                            g = np.maximum(0.0, g)
+                            b = np.maximum(0.0, b)
+                        
+                        # Apply saturation
+                        if sat_int != 255:
+                            avg = (r + g + b) / 3.0
+                            if sat_int == 0:
+                                # Full desaturation: all white
+                                r = np.zeros_like(r)
+                                g = np.zeros_like(g)
+                                b = np.zeros_like(b)
+                                w = avg + w
+                            else:
+                                # Partial desaturation
+                                desat_factor = (255 - sat_int) / 255.0
+                                sat_factor = sat_int / 255.0
+                                r = r * sat_factor + avg * desat_factor
+                                g = g * sat_factor + avg * desat_factor
+                                b = b * sat_factor + avg * desat_factor
+                                w = w + (avg * desat_factor * desat_factor)
+                    else:
+                        # Legacy algorithm: Uses desaturation
+                        max_vals = np.maximum(np.maximum(r, g), b)
+                        if sat_int == 0:
+                            r = np.zeros_like(r)
+                            g = np.zeros_like(g)
+                            b = np.zeros_like(b)
+                            min_vals = max_vals
+                        else:
+                            r = (r - max_vals) * saturation + max_vals
+                            g = (g - max_vals) * saturation + max_vals
+                            b = (b - max_vals) * saturation + max_vals
+                            min_vals = np.minimum(np.minimum(r, g), b)
+                            r -= min_vals
+                            g -= min_vals
+                            b -= min_vals
+                        w = min_vals * min_vals
+                else:
+                    # RGB mode saturation
+                    if sat_int != 255:
+                        avg = (r + g + b) / 3.0
+                        if sat_int == 0:
+                            r = avg
+                            g = avg
+                            b = avg
+                        else:
+                            r = (r - avg) * saturation + avg
+                            g = (g - avg) * saturation + avg
+                            b = (b - avg) * saturation + avg
+                
+                # Convert to uint8 with brightness and correction
+                corr_rgb = unpack_rgb(correction)
+                r8 = np.clip(r * brightness * 255 * corr_rgb[0] / 255, 0, 255).astype(np.uint8)
+                g8 = np.clip(g * brightness * 255 * corr_rgb[1] / 255, 0, 255).astype(np.uint8)
+                b8 = np.clip(b * brightness * 255 * corr_rgb[2] / 255, 0, 255).astype(np.uint8)
+                w8 = np.clip(w * brightness * 255, 0, 255).astype(np.uint8)
+                
+                # Batch set pixels
+                for i, (ri, gi, bi, wi) in enumerate(zip(r8, g8, b8, w8)):
+                    color = pack_rgbw(int(ri), int(gi), int(bi), int(wi))
+                    channel.setPixelColor(start + i, color)
+                    
+            except (ValueError, AttributeError, TypeError):
+                # Fall back to non-vectorized version
+                corr_rgb = unpack_rgb(correction)
+                for i in range(start, end):
+                    color = render_rgb_float(values[i - start], corr_rgb, saturation, brightness, has_white, white_temp, rgbw_algorithm)
+                    channel.setPixelColor(i, color)
         
         def ws2811_rgb_render_calibration(strip, channel, count, correction, brightness):
             """Render calibration color to all LEDs"""
