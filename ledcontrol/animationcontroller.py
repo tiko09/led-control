@@ -299,11 +299,27 @@ class AnimationController:
         'Get color from current palette corresponding to index between 0 and 1'
         # This gives a surprising performance improvement over doing the math in python
         # If the palette size is ever changed here, it needs to be changed in animation_utils.h
-        return self._current_palette_table[driver.float_to_int_1000(t)]
+        idx = driver.float_to_int_1000(t)
+        if idx >= len(self._current_palette_table):
+            logger.warning(
+                "Palette lookup index %s exceeded table length %s; clamping",
+                idx,
+                len(self._current_palette_table),
+            )
+            idx = len(self._current_palette_table) - 1
+        return self._current_palette_table[idx]
 
     def _get_palette_color_mirrored(self, t):
         'Version of get_palette_color that samples a mirrored version of the palette'
-        return self._current_palette_table[driver.float_to_int_1000_mirror(t)]
+        idx = driver.float_to_int_1000_mirror(t)
+        if idx >= len(self._current_palette_table):
+            logger.warning(
+                "Palette mirrored lookup index %s exceeded table length %s; clamping",
+                idx,
+                len(self._current_palette_table),
+            )
+            idx = len(self._current_palette_table) - 1
+        return self._current_palette_table[idx]
 
     # Animation and timer
 
