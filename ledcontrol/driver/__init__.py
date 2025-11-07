@@ -169,6 +169,102 @@ except ImportError as e:
         bb = blackbody_to_rgb(kelvin)
         return [rgb[0] * bb[0], rgb[1] * bb[1], rgb[2] * bb[2]]
 
+
+def color_temp_to_rgb(kelvin):
+    """Approximate conversion of color temperature (Kelvin) to RGB 0-255."""
+    temp = kelvin / 100.0
+
+    if temp <= 66:
+        r = 255
+    else:
+        r = temp - 60
+        r = 329.698727446 * (r ** -0.1332047592)
+        r = max(0.0, min(255.0, r))
+
+    if temp <= 66 and temp > 0:
+        g = 99.4708025861 * math.log(temp) - 161.1195681661
+    elif temp > 66:
+        g = temp - 60
+        g = 288.1221695283 * (g ** -0.0755148492)
+    else:
+        g = 0.0
+    g = max(0.0, min(255.0, g))
+
+    if temp >= 66:
+        b = 255.0
+    elif temp <= 19:
+        b = 0.0
+    else:
+        b = temp - 10
+        b = 138.5177312231 * math.log(b) - 305.0447927307
+        b = max(0.0, min(255.0, b))
+
+    return (r, g, b)
+
+
+def _normalize_temp_rgb(kelvin):
+    """Return normalized RGB (0..1) representation of a color temperature."""
+    rgb = color_temp_to_rgb(kelvin)
+    max_channel = max(rgb)
+    if max_channel <= 0:
+        return (1.0, 1.0, 1.0)
+    return tuple(channel / max_channel for channel in rgb)
+
+
+def _quantize_saturation(saturation):
+    """Clamp saturation to 0..1 and quantize to FastLED-style 0-255 scale."""
+    saturation = max(0.0, min(1.0, saturation))
+    sat_int = int(saturation * 255)
+    sat_factor = sat_int / 255.0
+    return sat_factor, sat_int
+
+
+def _mix_rgbw_advanced_scalar(rgb, sat_factor, target_temp, white_temp):
+    """Compute advanced RGBW mix for a single pixel in float space."""
+    r = max(0.0, min(1.0, rgb[0]))
+    g = max(0.0, min(1.0, rgb[1]))
+    b = max(0.0, min(1.0, rgb[2]))
+
+    max_val = max(r, g, b)
+    if max_val <= 0.0:
+        return 0.0, 0.0, 0.0, 0.0
+
+    min_val = min(r, g, b)
+    chroma = max_val - min_val
+
+    color_r = (r - min_val) * sat_factor
+    color_g = (g - min_val) * sat_factor
+    color_b = (b - min_val) * sat_factor
+
+    neutral_strength = min_val + (1.0 - sat_factor) * chroma
+
+    target_norm = _normalize_temp_rgb(target_temp)
+    desired_r = color_r + target_norm[0] * neutral_strength
+    desired_g = color_g + target_norm[1] * neutral_strength
+    desired_b = color_b + target_norm[2] * neutral_strength
+
+    white_norm = _normalize_temp_rgb(white_temp)
+
+    candidates = []
+    if white_norm[0] > 0:
+        candidates.append(desired_r / white_norm[0])
+    if white_norm[1] > 0:
+        candidates.append(desired_g / white_norm[1])
+    if white_norm[2] > 0:
+        candidates.append(desired_b / white_norm[2])
+
+    if candidates:
+        w = min(candidates)
+        w = max(0.0, min(w, neutral_strength))
+    else:
+        w = 0.0
+
+    r_out = max(0.0, desired_r - w * white_norm[0])
+    g_out = max(0.0, desired_g - w * white_norm[1])
+    b_out = max(0.0, desired_b - w * white_norm[2])
+
+    return r_out, g_out, b_out, w
+
 # Get Pi version once at module import time
 pi_version = get_raspberry_pi_version()
 
@@ -230,6 +326,46 @@ if pi_version == 5:
             """Clamp value between min and max"""
             return max(min_val, min(max_val, value))
         
+        def _mix_rgbw_advanced_numpy(r, g, b, sat_factor, target_temp, white_temp):
+            """Vectorized advanced RGBW mix for NumPy arrays."""
+            max_vals = np.maximum(np.maximum(r, g), b)
+            min_vals = np.minimum(np.minimum(r, g), b)
+            chroma = max_vals - min_vals
+
+            color_r = (r - min_vals) * sat_factor
+            color_g = (g - min_vals) * sat_factor
+            color_b = (b - min_vals) * sat_factor
+
+            neutral = min_vals + (1.0 - sat_factor) * chroma
+
+            target_norm = np.array(_normalize_temp_rgb(target_temp), dtype=np.float32)
+            desired_r = color_r + target_norm[0] * neutral
+            desired_g = color_g + target_norm[1] * neutral
+            desired_b = color_b + target_norm[2] * neutral
+
+            white_norm = np.array(_normalize_temp_rgb(white_temp), dtype=np.float32)
+
+            candidates = []
+            if white_norm[0] > 0:
+                candidates.append(desired_r / white_norm[0])
+            if white_norm[1] > 0:
+                candidates.append(desired_g / white_norm[1])
+            if white_norm[2] > 0:
+                candidates.append(desired_b / white_norm[2])
+
+            if candidates:
+                w = np.minimum.reduce(candidates)
+                w = np.minimum(w, neutral)
+                w = np.clip(w, 0.0, None)
+            else:
+                w = np.zeros_like(neutral)
+
+            r_out = np.clip(desired_r - w * white_norm[0], 0.0, None)
+            g_out = np.clip(desired_g - w * white_norm[1], 0.0, None)
+            b_out = np.clip(desired_b - w * white_norm[2], 0.0, None)
+
+            return r_out, g_out, b_out, w
+
         # Compatibility wrapper class for rpi5-ws2812-rgbw
         class WS2811Wrapper:
             """
@@ -387,44 +523,6 @@ if pi_version == 5:
             if strip is not None:
                 ws2811_fini(strip)
         
-        # Color temperature to RGB conversion (approximation)
-        def color_temp_to_rgb(kelvin):
-            """
-            Convert color temperature in Kelvin to RGB values (0-255)
-            Based on Tanner Helland's algorithm
-            """
-            temp = kelvin / 100.0
-            
-            # Red
-            if temp <= 66:
-                r = 255
-            else:
-                r = temp - 60
-                r = 329.698727446 * (r ** -0.1332047592)
-                r = max(0, min(255, r))
-            
-            # Green
-            if temp <= 66:
-                g = temp
-                g = 99.4708025861 * (g ** 0.07551484922) - 161.1195681661
-            else:
-                g = temp - 60
-                g = 288.1221695283 * (g ** -0.0755148492)
-            g = max(0, min(255, g))
-            
-            # Blue
-            if temp >= 66:
-                b = 255
-            else:
-                if temp <= 19:
-                    b = 0
-                else:
-                    b = temp - 10
-                    b = 138.5177312231 * (b ** 0.0767114632) - 305.0447927307
-                    b = max(0, min(255, b))
-            
-            return (int(r), int(g), int(b))
-        
         # HSV to RGB conversion (FastLED Rainbow algorithm)
         def render_hsv2rgb_rainbow_float(hsv, corr_rgb, saturation, brightness, has_white):
             """Convert HSV to RGB using FastLED's rainbow algorithm"""
@@ -525,75 +623,16 @@ if pi_version == 5:
             r = clamp(rgb[0], 0.0, 1.0)
             g = clamp(rgb[1], 0.0, 1.0)
             b = clamp(rgb[2], 0.0, 1.0)
+            sat_factor, sat_int = _quantize_saturation(saturation)
             w = 0.0
-            sat = int(saturation * 255)
-            
+
             if has_white:
                 if rgbw_algorithm == 'advanced':
-                    max_val = max(r, g, b)
-                    if max_val > 0.0:
-                        min_val = min(r, g, b)
-                        chroma = max_val - min_val
-                        sat_factor = sat / 255.0
-
-                        # Separate chroma (color) from the neutral component
-                        color_r = (r - min_val) * sat_factor
-                        color_g = (g - min_val) * sat_factor
-                        color_b = (b - min_val) * sat_factor
-
-                        # Amount of neutral light after saturation adjustment
-                        white_strength = min_val + (1.0 - sat_factor) * chroma
-
-                        # Map neutral light to desired target temperature
-                        target_rgb = color_temp_to_rgb(target_temp)
-                        target_max = max(target_rgb)
-                        if target_max > 0:
-                            target_r_norm = target_rgb[0] / target_max
-                            target_g_norm = target_rgb[1] / target_max
-                            target_b_norm = target_rgb[2] / target_max
-                        else:
-                            target_r_norm = target_g_norm = target_b_norm = 1.0
-
-                        desired_r = color_r + target_r_norm * white_strength
-                        desired_g = color_g + target_g_norm * white_strength
-                        desired_b = color_b + target_b_norm * white_strength
-                    else:
-                        desired_r = desired_g = desired_b = 0.0
-                        white_strength = 0.0
-
-                    # Extract white channel using actual white LED temperature
-                    white_rgb = color_temp_to_rgb(white_temp)
-                    white_max = max(white_rgb)
-                    if white_max > 0:
-                        white_r = white_rgb[0] / white_max
-                        white_g = white_rgb[1] / white_max
-                        white_b = white_rgb[2] / white_max
-                    else:
-                        white_r = white_g = white_b = 1.0
-
-                    if white_strength > 0.0 and white_max > 0:
-                        ratios = []
-                        if white_r > 0:
-                            ratios.append(desired_r / white_r)
-                        if white_g > 0:
-                            ratios.append(desired_g / white_g)
-                        if white_b > 0:
-                            ratios.append(desired_b / white_b)
-                        if ratios:
-                            w = min(ratios)
-                            w = max(0.0, min(w, white_strength))
-                        else:
-                            w = 0.0
-                    else:
-                        w = 0.0
-
-                    r = max(0.0, desired_r - (w * white_r))
-                    g = max(0.0, desired_g - (w * white_g))
-                    b = max(0.0, desired_b - (w * white_b))
+                    r, g, b, w = _mix_rgbw_advanced_scalar((r, g, b), sat_factor, target_temp, white_temp)
                 else:
                     # Legacy algorithm: Uses desaturation
                     max_val = max(r, g, b)
-                    if sat == 0:
+                    if sat_int == 0:
                         r, g, b = 0, 0, 0
                         min_val = max_val
                     else:
@@ -606,9 +645,9 @@ if pi_version == 5:
                         b -= min_val
                     w = min_val * min_val
             else:
-                if sat != 255:
+                if sat_int != 255:
                     avg = (r + g + b) / 3.0
-                    if sat == 0:
+                    if sat_int == 0:
                         r = g = b = avg
                     else:
                         r = (r - avg) * saturation + avg
@@ -811,68 +850,12 @@ if pi_version == 5:
                 g = np.clip(rgb_array[:, 1], 0.0, 1.0)
                 b = np.clip(rgb_array[:, 2], 0.0, 1.0)
                 w = np.zeros(len(r), dtype=np.float32)
-                
-                sat_int = int(saturation * 255)
-                
+
+                sat_factor, sat_int = _quantize_saturation(saturation)
+
                 if has_white:
                     if rgbw_algorithm == 'advanced':
-                        max_vals = np.maximum(np.maximum(r, g), b)
-                        min_vals = np.minimum(np.minimum(r, g), b)
-                        chroma = max_vals - min_vals
-                        sat_factor = sat_int / 255.0
-
-                        # Separate chroma (color) from the neutral component
-                        color_r = (r - min_vals) * sat_factor
-                        color_g = (g - min_vals) * sat_factor
-                        color_b = (b - min_vals) * sat_factor
-
-                        # Amount of neutral light after saturation adjustment
-                        white_strength = min_vals + (1.0 - sat_factor) * chroma
-
-                        # Map neutral light to desired target temperature
-                        target_rgb = color_temp_to_rgb(target_temp)
-                        target_max = max(target_rgb)
-                        if target_max > 0:
-                            target_r_norm = target_rgb[0] / target_max
-                            target_g_norm = target_rgb[1] / target_max
-                            target_b_norm = target_rgb[2] / target_max
-                        else:
-                            target_r_norm = target_g_norm = target_b_norm = 1.0
-
-                        desired_r = color_r + target_r_norm * white_strength
-                        desired_g = color_g + target_g_norm * white_strength
-                        desired_b = color_b + target_b_norm * white_strength
-
-                        # Extract white channel using actual white LED temperature
-                        white_rgb = color_temp_to_rgb(white_temp)
-                        white_max = max(white_rgb)
-                        if white_max > 0:
-                            white_r = white_rgb[0] / white_max
-                            white_g = white_rgb[1] / white_max
-                            white_b = white_rgb[2] / white_max
-                        else:
-                            white_r = white_g = white_b = 1.0
-
-                        if white_max > 0:
-                            ratios = []
-                            if white_r > 0:
-                                ratios.append(desired_r / white_r)
-                            if white_g > 0:
-                                ratios.append(desired_g / white_g)
-                            if white_b > 0:
-                                ratios.append(desired_b / white_b)
-                            if ratios:
-                                w = np.minimum.reduce(ratios)
-                                w = np.minimum(w, white_strength)
-                                w = np.clip(w, 0.0, None)
-                            else:
-                                w = np.zeros_like(white_strength)
-                        else:
-                            w = np.zeros_like(white_strength)
-
-                        r = np.clip(desired_r - (w * white_r), 0.0, None)
-                        g = np.clip(desired_g - (w * white_g), 0.0, None)
-                        b = np.clip(desired_b - (w * white_b), 0.0, None)
+                        r, g, b, w = _mix_rgbw_advanced_numpy(r, g, b, sat_factor, target_temp, white_temp)
                     else:
                         # Legacy algorithm: Uses desaturation
                         max_vals = np.maximum(np.maximum(r, g), b)
@@ -1106,86 +1089,31 @@ elif pi_version == 3:
                 r = clamp(rgb[0], 0.0, 1.0)
                 g = clamp(rgb[1], 0.0, 1.0)
                 b = clamp(rgb[2], 0.0, 1.0)
+                sat_factor, sat_int = _quantize_saturation(saturation)
                 w = 0.0
-                sat = int(saturation * 255)
-                
+
                 if has_white:
                     if rgbw_algorithm == 'advanced':
-                        max_val = max(r, g, b)
-                        if max_val > 0.0:
-                            min_val = min(r, g, b)
-                            chroma = max_val - min_val
-                            sat_factor = sat / 255.0
-
-                            color_r = (r - min_val) * sat_factor
-                            color_g = (g - min_val) * sat_factor
-                            color_b = (b - min_val) * sat_factor
-
-                            white_strength = min_val + (1.0 - sat_factor) * chroma
-
-                            target_rgb = color_temp_to_rgb(target_temp)
-                            target_max = max(target_rgb)
-                            if target_max > 0:
-                                target_r_norm = target_rgb[0] / target_max
-                                target_g_norm = target_rgb[1] / target_max
-                                target_b_norm = target_rgb[2] / target_max
-                            else:
-                                target_r_norm = target_g_norm = target_b_norm = 1.0
-
-                            desired_r = color_r + target_r_norm * white_strength
-                            desired_g = color_g + target_g_norm * white_strength
-                            desired_b = color_b + target_b_norm * white_strength
-                        else:
-                            desired_r = desired_g = desired_b = 0.0
-                            white_strength = 0.0
-
-                        white_rgb = color_temp_to_rgb(white_temp)
-                        white_max = max(white_rgb)
-                        if white_max > 0:
-                            white_r = white_rgb[0] / white_max
-                            white_g = white_rgb[1] / white_max
-                            white_b = white_rgb[2] / white_max
-                        else:
-                            white_r = white_g = white_b = 1.0
-
-                        if white_strength > 0.0 and white_max > 0:
-                            ratios = []
-                            if white_r > 0:
-                                ratios.append(desired_r / white_r)
-                            if white_g > 0:
-                                ratios.append(desired_g / white_g)
-                            if white_b > 0:
-                                ratios.append(desired_b / white_b)
-                            if ratios:
-                                w = min(ratios)
-                                w = max(0.0, min(w, white_strength))
-                            else:
-                                w = 0.0
-                        else:
-                            w = 0.0
-
-                        r = max(0.0, desired_r - (w * white_r))
-                        g = max(0.0, desired_g - (w * white_g))
-                        b = max(0.0, desired_b - (w * white_b))
+                        r, g, b, w = _mix_rgbw_advanced_scalar((r, g, b), sat_factor, target_temp, white_temp)
                     else:
                         # Legacy algorithm
                         max_val = max(r, g, b)
-                    if sat == 0:
-                        r, g, b = 0, 0, 0
-                        min_val = max_val
-                    else:
-                        r = (r - max_val) * saturation + max_val
-                        g = (g - max_val) * saturation + max_val
-                        b = (b - max_val) * saturation + max_val
-                        min_val = min(r, g, b)
-                        r -= min_val
-                        g -= min_val
-                        b -= min_val
-                    w = min_val * min_val
+                        if sat_int == 0:
+                            r, g, b = 0, 0, 0
+                            min_val = max_val
+                        else:
+                            r = (r - max_val) * saturation + max_val
+                            g = (g - max_val) * saturation + max_val
+                            b = (b - max_val) * saturation + max_val
+                            min_val = min(r, g, b)
+                            r -= min_val
+                            g -= min_val
+                            b -= min_val
+                        w = min_val * min_val
                 else:
-                    if sat != 255:
+                    if sat_int != 255:
                         avg = (r + g + b) / 3.0
-                        if sat == 0:
+                        if sat_int == 0:
                             r = g = b = avg
                         else:
                             r = (r - avg) * saturation + avg
