@@ -147,11 +147,12 @@ class AnimationController:
             self.calculate_palette_table(key)
 
     def calculate_color_correction(self):
-        'Calculate and store color temperature correction'
-        rgb = driver.blackbody_to_rgb(self._settings['global_color_temp'])
-        c = [self._settings['global_color_r'] * int(rgb[0] * 255) // 255,
-             self._settings['global_color_g'] * int(rgb[1] * 255) // 255,
-             self._settings['global_color_b'] * int(rgb[2] * 255) // 255]
+        'Calculate and store RGB correction (for calibrating RGB subpixels to neutral 6500K)'
+        # RGB correction ONLY calibrates the RGB subpixels - does NOT include target temperature
+        # Target temperature (global_color_temp) is handled separately in RGBW advanced algorithm
+        c = [self._settings['global_color_r'],
+             self._settings['global_color_g'],
+             self._settings['global_color_b']]
         self._correction = (c[0] << 16) | (c[1] << 8) | c[2]
 
     def calculate_mapping(self):
