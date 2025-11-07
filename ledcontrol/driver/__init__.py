@@ -3,6 +3,8 @@
  
 import io
 import math
+import os
+import logging
 
 def get_raspberry_pi_version():
     """
@@ -168,6 +170,41 @@ except ImportError as e:
     def blackbody_correction_rgb(rgb, kelvin):
         bb = blackbody_to_rgb(kelvin)
         return [rgb[0] * bb[0], rgb[1] * bb[1], rgb[2] * bb[2]]
+
+
+    _RGBW_DEBUG_RAW = os.environ.get("LEDCONTROL_DEBUG_RGBW")
+    if _RGBW_DEBUG_RAW:
+        try:
+            _RGBW_DEBUG_LIMIT = int(_RGBW_DEBUG_RAW)
+        except ValueError:
+            _RGBW_DEBUG_LIMIT = 10
+        _RGBW_DEBUG_LOGGER = logging.getLogger("ledcontrol.rgbw")
+        _RGBW_DEBUG_COUNT = 0
+    else:
+        _RGBW_DEBUG_LIMIT = 0
+        _RGBW_DEBUG_LOGGER = None
+        _RGBW_DEBUG_COUNT = 0
+
+
+    def _log_rgbw_debug(context, *, source_rgb, saturation, brightness, target_temp, white_temp, floats, packed):
+        global _RGBW_DEBUG_COUNT
+        if _RGBW_DEBUG_LIMIT <= 0 or _RGBW_DEBUG_COUNT >= _RGBW_DEBUG_LIMIT or _RGBW_DEBUG_LOGGER is None:
+            return
+        _RGBW_DEBUG_COUNT += 1
+        _RGBW_DEBUG_LOGGER.info(
+            "%s | input_rgb=%s sat=%.3f bright=%.3f targetK=%s whiteK=%s -> floats=(%.3f, %.3f, %.3f, %.3f) -> packed_rgba=%s",
+            context,
+            tuple(round(c, 4) for c in source_rgb),
+            saturation,
+            brightness,
+            target_temp,
+            white_temp,
+            floats[0],
+            floats[1],
+            floats[2],
+            floats[3],
+            packed,
+        )
 
 
 def color_temp_to_rgb(kelvin):
@@ -663,6 +700,18 @@ if pi_version == 5:
             r8 = scale_8(r8, corr_rgb[0])
             g8 = scale_8(g8, corr_rgb[1])
             b8 = scale_8(b8, corr_rgb[2])
+
+            if _RGBW_DEBUG_LIMIT > 0:
+                _log_rgbw_debug(
+                    "scalar",
+                    source_rgb=rgb,
+                    saturation=saturation,
+                    brightness=brightness,
+                    target_temp=target_temp,
+                    white_temp=white_temp,
+                    floats=(r, g, b, w),
+                    packed=(r8, g8, b8, w8),
+                )
             
             return pack_rgbw(r8, g8, b8, w8)
         
@@ -892,6 +941,19 @@ if pi_version == 5:
                 g8 = np.clip(g * brightness * 255 * corr_rgb[1] / 255, 0, 255).astype(np.uint8)
                 b8 = np.clip(b * brightness * 255 * corr_rgb[2] / 255, 0, 255).astype(np.uint8)
                 w8 = np.clip(w * brightness * 255, 0, 255).astype(np.uint8)
+
+                if _RGBW_DEBUG_LIMIT > 0 and len(r) > 0:
+                    idx = 0
+                    _log_rgbw_debug(
+                        "vector",
+                        source_rgb=(float(rgb_array[idx, 0]), float(rgb_array[idx, 1]), float(rgb_array[idx, 2])),
+                        saturation=saturation,
+                        brightness=brightness,
+                        target_temp=target_temp,
+                        white_temp=white_temp,
+                        floats=(float(r[idx]), float(g[idx]), float(b[idx]), float(w[idx])),
+                        packed=(int(r8[idx]), int(g8[idx]), int(b8[idx]), int(w8[idx])),
+                    )
                 
                 # Batch set pixels using array method (FAST!)
                 try:
