@@ -530,59 +530,66 @@ if pi_version == 5:
             
             if has_white:
                 if rgbw_algorithm == 'advanced':
-                    # Step 1: Apply saturation to get target white color
-                    # When saturation=0, desaturate towards target_temp white instead of neutral white
-                    if sat != 255:
-                        if sat == 0:
-                            # Full desaturation: Replace RGB with white at target temperature
-                            total_brightness = max(r, g, b)
-                            target_rgb = color_temp_to_rgb(target_temp)
-                            r = (target_rgb[0] / 255.0) * total_brightness
-                            g = (target_rgb[1] / 255.0) * total_brightness
-                            b = (target_rgb[2] / 255.0) * total_brightness
+                    max_val = max(r, g, b)
+                    if max_val > 0.0:
+                        min_val = min(r, g, b)
+                        chroma = max_val - min_val
+                        sat_factor = sat / 255.0
+
+                        # Separate chroma (color) from the neutral component
+                        color_r = (r - min_val) * sat_factor
+                        color_g = (g - min_val) * sat_factor
+                        color_b = (b - min_val) * sat_factor
+
+                        # Amount of neutral light after saturation adjustment
+                        white_strength = min_val + (1.0 - sat_factor) * chroma
+
+                        # Map neutral light to desired target temperature
+                        target_rgb = color_temp_to_rgb(target_temp)
+                        target_max = max(target_rgb)
+                        if target_max > 0:
+                            target_r_norm = target_rgb[0] / target_max
+                            target_g_norm = target_rgb[1] / target_max
+                            target_b_norm = target_rgb[2] / target_max
                         else:
-                            # Partial desaturation: Blend towards white at target temperature
-                            total_brightness = max(r, g, b)
-                            target_rgb = color_temp_to_rgb(target_temp)
-                            target_r = (target_rgb[0] / 255.0) * total_brightness
-                            target_g = (target_rgb[1] / 255.0) * total_brightness
-                            target_b = (target_rgb[2] / 255.0) * total_brightness
-                            
-                            sat_factor = sat / 255.0
-                            desat_factor = 1.0 - sat_factor
-                            r = r * sat_factor + target_r * desat_factor
-                            g = g * sat_factor + target_g * desat_factor
-                            b = b * sat_factor + target_b * desat_factor
-                    
-                    # Step 2: Extract white channel from RGB
-                    # Use W LED for common RGB component, compensate for W LED color temperature
-                    min_val = min(r, g, b)
-                    if min_val > 0:
-                        # Get white LED color temperature
-                        white_rgb = color_temp_to_rgb(white_temp)
-                        white_r = white_rgb[0] / 255.0
-                        white_g = white_rgb[1] / 255.0
-                        white_b = white_rgb[2] / 255.0
-                        
-                        # Normalize white LED color to preserve color ratios
-                        white_max = max(white_r, white_g, white_b)
-                        if white_max > 0:
-                            white_r /= white_max
-                            white_g /= white_max
-                            white_b /= white_max
-                        
-                        # Extract white: Use W LED for the common component
-                        w = min_val
-                        
-                        # Subtract white LED contribution from RGB (color temperature compensation)
-                        r = r - (w * white_r)
-                        g = g - (w * white_g)
-                        b = b - (w * white_b)
-                        
-                        # Clamp to valid range (white LED might cause slight negative values)
-                        r = max(0.0, r)
-                        g = max(0.0, g)
-                        b = max(0.0, b)
+                            target_r_norm = target_g_norm = target_b_norm = 1.0
+
+                        desired_r = color_r + target_r_norm * white_strength
+                        desired_g = color_g + target_g_norm * white_strength
+                        desired_b = color_b + target_b_norm * white_strength
+                    else:
+                        desired_r = desired_g = desired_b = 0.0
+                        white_strength = 0.0
+
+                    # Extract white channel using actual white LED temperature
+                    white_rgb = color_temp_to_rgb(white_temp)
+                    white_max = max(white_rgb)
+                    if white_max > 0:
+                        white_r = white_rgb[0] / white_max
+                        white_g = white_rgb[1] / white_max
+                        white_b = white_rgb[2] / white_max
+                    else:
+                        white_r = white_g = white_b = 1.0
+
+                    if white_strength > 0.0 and white_max > 0:
+                        ratios = []
+                        if white_r > 0:
+                            ratios.append(desired_r / white_r)
+                        if white_g > 0:
+                            ratios.append(desired_g / white_g)
+                        if white_b > 0:
+                            ratios.append(desired_b / white_b)
+                        if ratios:
+                            w = min(ratios)
+                            w = max(0.0, min(w, white_strength))
+                        else:
+                            w = 0.0
+                    else:
+                        w = 0.0
+
+                    r = max(0.0, desired_r - (w * white_r))
+                    g = max(0.0, desired_g - (w * white_g))
+                    b = max(0.0, desired_b - (w * white_b))
                 else:
                     # Legacy algorithm: Uses desaturation
                     max_val = max(r, g, b)
@@ -809,59 +816,63 @@ if pi_version == 5:
                 
                 if has_white:
                     if rgbw_algorithm == 'advanced':
-                        # Step 1: Apply saturation (desaturate towards target temperature white)
-                        if sat_int != 255:
-                            if sat_int == 0:
-                                # Full desaturation: Replace RGB with white at target temperature
-                                total_brightness = np.maximum(np.maximum(r, g), b)
-                                target_rgb = color_temp_to_rgb(target_temp)
-                                r = (target_rgb[0] / 255.0) * total_brightness
-                                g = (target_rgb[1] / 255.0) * total_brightness
-                                b = (target_rgb[2] / 255.0) * total_brightness
-                            else:
-                                # Partial desaturation: Blend towards white at target temperature
-                                total_brightness = np.maximum(np.maximum(r, g), b)
-                                target_rgb = color_temp_to_rgb(target_temp)
-                                target_r = (target_rgb[0] / 255.0) * total_brightness
-                                target_g = (target_rgb[1] / 255.0) * total_brightness
-                                target_b = (target_rgb[2] / 255.0) * total_brightness
-                                
-                                sat_factor = sat_int / 255.0
-                                desat_factor = 1.0 - sat_factor
-                                r = r * sat_factor + target_r * desat_factor
-                                g = g * sat_factor + target_g * desat_factor
-                                b = b * sat_factor + target_b * desat_factor
-                        
-                        # Step 2: Extract white channel (compensate for W LED color temperature)
+                        max_vals = np.maximum(np.maximum(r, g), b)
                         min_vals = np.minimum(np.minimum(r, g), b)
-                        mask_has_min = min_vals > 0
-                        
-                        if np.any(mask_has_min):
-                            # Get white LED color temperature
-                            white_rgb = color_temp_to_rgb(white_temp)
-                            white_r = white_rgb[0] / 255.0
-                            white_g = white_rgb[1] / 255.0
-                            white_b = white_rgb[2] / 255.0
-                            
-                            # Normalize white LED color to preserve ratios
-                            white_max = max(white_r, white_g, white_b)
-                            if white_max > 0:
-                                white_r /= white_max
-                                white_g /= white_max
-                                white_b /= white_max
-                            
-                            # Extract white component
-                            w[mask_has_min] = min_vals[mask_has_min]
-                            
-                            # Subtract white LED contribution (color temperature compensation)
-                            r[mask_has_min] = r[mask_has_min] - (w[mask_has_min] * white_r)
-                            g[mask_has_min] = g[mask_has_min] - (w[mask_has_min] * white_g)
-                            b[mask_has_min] = b[mask_has_min] - (w[mask_has_min] * white_b)
-                            
-                            # Clamp to valid range
-                            r = np.maximum(0.0, r)
-                            g = np.maximum(0.0, g)
-                            b = np.maximum(0.0, b)
+                        chroma = max_vals - min_vals
+                        sat_factor = sat_int / 255.0
+
+                        # Separate chroma (color) from the neutral component
+                        color_r = (r - min_vals) * sat_factor
+                        color_g = (g - min_vals) * sat_factor
+                        color_b = (b - min_vals) * sat_factor
+
+                        # Amount of neutral light after saturation adjustment
+                        white_strength = min_vals + (1.0 - sat_factor) * chroma
+
+                        # Map neutral light to desired target temperature
+                        target_rgb = color_temp_to_rgb(target_temp)
+                        target_max = max(target_rgb)
+                        if target_max > 0:
+                            target_r_norm = target_rgb[0] / target_max
+                            target_g_norm = target_rgb[1] / target_max
+                            target_b_norm = target_rgb[2] / target_max
+                        else:
+                            target_r_norm = target_g_norm = target_b_norm = 1.0
+
+                        desired_r = color_r + target_r_norm * white_strength
+                        desired_g = color_g + target_g_norm * white_strength
+                        desired_b = color_b + target_b_norm * white_strength
+
+                        # Extract white channel using actual white LED temperature
+                        white_rgb = color_temp_to_rgb(white_temp)
+                        white_max = max(white_rgb)
+                        if white_max > 0:
+                            white_r = white_rgb[0] / white_max
+                            white_g = white_rgb[1] / white_max
+                            white_b = white_rgb[2] / white_max
+                        else:
+                            white_r = white_g = white_b = 1.0
+
+                        if white_max > 0:
+                            ratios = []
+                            if white_r > 0:
+                                ratios.append(desired_r / white_r)
+                            if white_g > 0:
+                                ratios.append(desired_g / white_g)
+                            if white_b > 0:
+                                ratios.append(desired_b / white_b)
+                            if ratios:
+                                w = np.minimum.reduce(ratios)
+                                w = np.minimum(w, white_strength)
+                                w = np.clip(w, 0.0, None)
+                            else:
+                                w = np.zeros_like(white_strength)
+                        else:
+                            w = np.zeros_like(white_strength)
+
+                        r = np.clip(desired_r - (w * white_r), 0.0, None)
+                        g = np.clip(desired_g - (w * white_g), 0.0, None)
+                        b = np.clip(desired_b - (w * white_b), 0.0, None)
                     else:
                         # Legacy algorithm: Uses desaturation
                         max_vals = np.maximum(np.maximum(r, g), b)
@@ -1100,57 +1111,62 @@ elif pi_version == 3:
                 
                 if has_white:
                     if rgbw_algorithm == 'advanced':
-                        # Step 1: Apply saturation (desaturate towards target temperature white)
-                        if sat != 255:
-                            if sat == 0:
-                                # Full desaturation: Replace RGB with white at target temperature
-                                total_brightness = max(r, g, b)
-                                target_rgb = color_temp_to_rgb(target_temp)
-                                r = (target_rgb[0] / 255.0) * total_brightness
-                                g = (target_rgb[1] / 255.0) * total_brightness
-                                b = (target_rgb[2] / 255.0) * total_brightness
+                        max_val = max(r, g, b)
+                        if max_val > 0.0:
+                            min_val = min(r, g, b)
+                            chroma = max_val - min_val
+                            sat_factor = sat / 255.0
+
+                            color_r = (r - min_val) * sat_factor
+                            color_g = (g - min_val) * sat_factor
+                            color_b = (b - min_val) * sat_factor
+
+                            white_strength = min_val + (1.0 - sat_factor) * chroma
+
+                            target_rgb = color_temp_to_rgb(target_temp)
+                            target_max = max(target_rgb)
+                            if target_max > 0:
+                                target_r_norm = target_rgb[0] / target_max
+                                target_g_norm = target_rgb[1] / target_max
+                                target_b_norm = target_rgb[2] / target_max
                             else:
-                                # Partial desaturation: Blend towards white at target temperature
-                                total_brightness = max(r, g, b)
-                                target_rgb = color_temp_to_rgb(target_temp)
-                                target_r = (target_rgb[0] / 255.0) * total_brightness
-                                target_g = (target_rgb[1] / 255.0) * total_brightness
-                                target_b = (target_rgb[2] / 255.0) * total_brightness
-                                
-                                sat_factor = sat / 255.0
-                                desat_factor = 1.0 - sat_factor
-                                r = r * sat_factor + target_r * desat_factor
-                                g = g * sat_factor + target_g * desat_factor
-                                b = b * sat_factor + target_b * desat_factor
-                        
-                        # Step 2: Extract white channel (compensate for W LED color temperature)
-                        min_val = min(r, g, b)
-                        if min_val > 0:
-                            # Get white LED color temperature
-                            white_rgb = color_temp_to_rgb(white_temp)
-                            white_r = white_rgb[0] / 255.0
-                            white_g = white_rgb[1] / 255.0
-                            white_b = white_rgb[2] / 255.0
-                            
-                            # Normalize white LED color to preserve ratios
-                            white_max = max(white_r, white_g, white_b)
-                            if white_max > 0:
-                                white_r /= white_max
-                                white_g /= white_max
-                                white_b /= white_max
-                            
-                            # Extract white component
-                            w = min_val
-                            
-                            # Subtract white LED contribution (color temperature compensation)
-                            r = r - (w * white_r)
-                            g = g - (w * white_g)
-                            b = b - (w * white_b)
-                            
-                            # Clamp to valid range
-                            r = max(0.0, r)
-                            g = max(0.0, g)
-                            b = max(0.0, b)
+                                target_r_norm = target_g_norm = target_b_norm = 1.0
+
+                            desired_r = color_r + target_r_norm * white_strength
+                            desired_g = color_g + target_g_norm * white_strength
+                            desired_b = color_b + target_b_norm * white_strength
+                        else:
+                            desired_r = desired_g = desired_b = 0.0
+                            white_strength = 0.0
+
+                        white_rgb = color_temp_to_rgb(white_temp)
+                        white_max = max(white_rgb)
+                        if white_max > 0:
+                            white_r = white_rgb[0] / white_max
+                            white_g = white_rgb[1] / white_max
+                            white_b = white_rgb[2] / white_max
+                        else:
+                            white_r = white_g = white_b = 1.0
+
+                        if white_strength > 0.0 and white_max > 0:
+                            ratios = []
+                            if white_r > 0:
+                                ratios.append(desired_r / white_r)
+                            if white_g > 0:
+                                ratios.append(desired_g / white_g)
+                            if white_b > 0:
+                                ratios.append(desired_b / white_b)
+                            if ratios:
+                                w = min(ratios)
+                                w = max(0.0, min(w, white_strength))
+                            else:
+                                w = 0.0
+                        else:
+                            w = 0.0
+
+                        r = max(0.0, desired_r - (w * white_r))
+                        g = max(0.0, desired_g - (w * white_g))
+                        b = max(0.0, desired_b - (w * white_b))
                     else:
                         # Legacy algorithm
                         max_val = max(r, g, b)
