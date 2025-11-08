@@ -4,7 +4,6 @@ import struct
 import threading
 import logging
 import math
-from queue import Queue, Empty
 from typing import Callable, Optional
 import time
 
@@ -43,7 +42,6 @@ class ArtNetServer:
         self._sock: Optional[socket.socket] = None
         self._thread: Optional[threading.Thread] = None
         self._running = threading.Event()
-        self._queue: Queue = Queue()
         self.log = logging.getLogger("artnet")
         self._fps_start = time.time()
         self._fps_last_report = self._fps_start
@@ -57,8 +55,6 @@ class ArtNetServer:
         self._running.set()
         self._sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self._sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        # Set timeout instead of non-blocking to work with eventlet
-        self._sock.settimeout(0.1)  # 100ms timeout
         self._sock.bind((self.host, ARTNET_PORT))
         self._thread = threading.Thread(target=self._run,
                                         name="ArtNetServer",
@@ -78,17 +74,10 @@ class ArtNetServer:
             self._thread.join(timeout=1)
         self.log.info("ArtNet Server gestoppt")
 
-    def poll(self):
-        # Keine Funktion mehr nötig bei Direktverarbeitung – nur für Rückwärtskompatibilität
-        return 0
-
     def _run(self):
         while self._running.is_set():
             try:
                 pkt, addr = self._sock.recvfrom(2048)
-            except socket.timeout:
-                # Timeout is normal, just continue
-                continue
             except OSError:
                 if not self._running.is_set():
                     break
@@ -163,6 +152,7 @@ class ArtNetServer:
                 expanded.extend((r, g, b, w))
                 phys_used += 1
         if expanded and self.spatial_smoothing == "none":
+            # Directly update LEDs when packet arrives
             self.set_led_rgbw(expanded, 0)
 
         # --- Spatial Smoothing über Nachbar-LEDs ---
@@ -241,6 +231,7 @@ class ArtNetServer:
                 expanded = smoothed
             
             if expanded:
+                # Directly update LEDs when packet arrives  
                 self.set_led_rgbw(expanded, 0)
 
         # FPS
