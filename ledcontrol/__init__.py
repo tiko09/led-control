@@ -68,37 +68,31 @@ def main():
                      args.port)
 
     if args.dev:
-        # Development mode: use Flask-SocketIO's built-in server
+        # Development mode: use Flask-SocketIO with eventlet
         # Disable auto-reload to prevent settings loss and animation interruption
-        app.socketio.run(app, host=args.host, port=args.port, debug=True, use_reloader=False, allow_unsafe_werkzeug=True)
-    else:
-        # Production mode: Try to use eventlet or gevent for WebSocket support
-        # Fall back to bjoern if neither is available (but WebSockets won't work)
-        # Note: eventlet.monkey_patch() was already called at module import time
         try:
-            # Try eventlet first (recommended for Flask-SocketIO)
             import eventlet
-            print(f"Starting server with eventlet (WebSocket support enabled)")
-            app.socketio.run(app, host=args.host, port=args.port, allow_unsafe_werkzeug=True)
+            print(f"Development mode: Starting server with eventlet")
+            app.socketio.run(app, host=args.host, port=args.port, debug=True, use_reloader=False)
         except ImportError:
+            print("Warning: eventlet not found, falling back to Werkzeug (not recommended)")
+            print("Install eventlet: pip install eventlet")
+            app.socketio.run(app, host=args.host, port=args.port, debug=True, use_reloader=False, allow_unsafe_werkzeug=True)
+    else:
+        # Production mode: Require eventlet for WebSocket support
+        try:
+            import eventlet
+            print(f"Production mode: Starting server with eventlet (WebSocket support enabled)")
+            # Don't need allow_unsafe_werkzeug when eventlet is properly loaded
+            app.socketio.run(app, host=args.host, port=args.port)
+        except ImportError:
+            print("ERROR: eventlet is required for production mode!")
+            print("Install it with: pip install eventlet")
+            print("Attempting to start anyway (WebSockets will not work)...")
             try:
-                # Try gevent as fallback
-                from gevent import monkey
-                monkey.patch_all()
-                import gevent.pywsgi
-                from geventwebsocket.handler import WebSocketHandler
-                print(f"Starting server with gevent (WebSocket support enabled)")
+                # Last resort fallback
                 app.socketio.run(app, host=args.host, port=args.port, allow_unsafe_werkzeug=True)
-            except ImportError:
-                # Fall back to bjoern (no WebSocket support)
-                print("Warning: Neither eventlet nor gevent found. WebSocket features will not work.")
-                print("Install eventlet for full WebSocket support: pip install eventlet")
-                print("LED Visualizer and real-time Discovery updates will not function.")
-                try:
-                    import bjoern
-                    print(f"Starting server with bjoern on {args.host}:{args.port}")
-                    bjoern.run(app, host=args.host, port=args.port)
-                except ImportError:
-                    print("Error: No suitable WSGI server found. Install eventlet or bjoern.")
-                    print("Install with: pip install eventlet")
-                    sys.exit(1)
+            except Exception as e:
+                print(f"Failed to start server: {e}")
+                print("\nPlease install eventlet: pip install eventlet")
+                sys.exit(1)
