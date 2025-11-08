@@ -1,0 +1,20 @@
+[Unit]
+Description=LED Control Server - WS2812B/SK6812 RGBW LED Controller
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/home/pi/led-control
+ExecStart=/usr/local/bin/ledcontrol --led_count 144 --led_pixel_order GRBW
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
