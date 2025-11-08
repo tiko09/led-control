@@ -10,7 +10,7 @@ _use_eventlet = '--dev' not in sys.argv and os.environ.get('LEDCONTROL_DEV') != 
 if _use_eventlet:
     try:
         import eventlet
-        # Monkey patch but exclude thread to avoid breaking zeroconf
+        # Monkey patch but exclude thread to avoid breaking zeroconf and ArtNet
         eventlet.monkey_patch(thread=False)
     except ImportError:
         pass  # Will handle this later in main()

@@ -4,7 +4,6 @@ import struct
 import threading
 import logging
 import math
-import select
 from queue import Queue, Empty
 from typing import Callable, Optional
 import time
@@ -58,7 +57,8 @@ class ArtNetServer:
         self._running.set()
         self._sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self._sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self._sock.setblocking(False)  # Non-blocking to prevent eventlet interference
+        # Set timeout instead of non-blocking to work with eventlet
+        self._sock.settimeout(0.1)  # 100ms timeout
         self._sock.bind((self.host, ARTNET_PORT))
         self._thread = threading.Thread(target=self._run,
                                         name="ArtNetServer",
@@ -84,15 +84,10 @@ class ArtNetServer:
 
     def _run(self):
         while self._running.is_set():
-            # Use select for efficient waiting without busy-loop
-            ready, _, _ = select.select([self._sock], [], [], 0.1)  # 100ms timeout
-            if not ready:
-                continue
-            
             try:
                 pkt, addr = self._sock.recvfrom(2048)
-            except BlockingIOError:
-                # Shouldn't happen with select, but handle it anyway
+            except socket.timeout:
+                # Timeout is normal, just continue
                 continue
             except OSError:
                 if not self._running.is_set():
