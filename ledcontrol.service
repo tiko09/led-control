@@ -5,6 +5,8 @@ After=network.target
 [Service]
 Type=simple
 User=root
+# WorkingDirectory is set by install-service.sh to the repository location
+# This ensures config files and logs can use relative paths if needed
 WorkingDirectory=/home/pi/led-control
 ExecStart=/usr/local/bin/ledcontrol --led_count 144 --led_pixel_order GRBW
 Restart=always
