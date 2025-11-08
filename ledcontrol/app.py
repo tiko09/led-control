@@ -50,7 +50,7 @@ def create_app(led_count,
     app.config['SECRET_KEY'] = 'led-control-secret-key-change-in-production'
     
     # Initialize SocketIO for LED visualizer
-    socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
+    socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
 
     # Create pixel mapping function
     if pixel_mapping_file is not None:
