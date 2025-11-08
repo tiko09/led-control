@@ -75,6 +75,14 @@
   PyList_SetItem($result, 2, PyFloat_FromDouble($1.b));
 }
 
+%typemap(out) color_rgbw_float {
+  $result = PyTuple_New(4);
+  PyTuple_SetItem($result, 0, PyFloat_FromDouble($1.r));
+  PyTuple_SetItem($result, 1, PyFloat_FromDouble($1.g));
+  PyTuple_SetItem($result, 2, PyFloat_FromDouble($1.b));
+  PyTuple_SetItem($result, 3, PyFloat_FromDouble($1.w));
+}
+
 %{
 static int convert_iarray_32(PyObject *input, uint32_t *ptr, int size) {
   int i;

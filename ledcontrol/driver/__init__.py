@@ -172,42 +172,37 @@ except ImportError as e:
         return [rgb[0] * bb[0], rgb[1] * bb[1], rgb[2] * bb[2]]
 
 
-    _RGBW_DEBUG_RAW = os.environ.get("LEDCONTROL_DEBUG_RGBW")
-    if _RGBW_DEBUG_RAW:
-        try:
-            _RGBW_DEBUG_LIMIT = int(_RGBW_DEBUG_RAW)
-        except ValueError:
-            _RGBW_DEBUG_LIMIT = 10
-        _RGBW_DEBUG_LOGGER = logging.getLogger("ledcontrol.rgbw")
-        _RGBW_DEBUG_COUNT = 0
-    else:
-        _RGBW_DEBUG_LIMIT = 0
-        _RGBW_DEBUG_LOGGER = None
-        _RGBW_DEBUG_COUNT = 0
+# =============================================================================
+# RGBW Color Mixing Helpers
+# =============================================================================
 
+# Try to use optimized C implementations if available
+_USE_C_RGBW = False
 
-    def _log_rgbw_debug(context, *, source_rgb, saturation, brightness, target_temp, white_temp, floats, packed):
-        global _RGBW_DEBUG_COUNT
-        if _RGBW_DEBUG_LIMIT <= 0 or _RGBW_DEBUG_COUNT >= _RGBW_DEBUG_LIMIT or _RGBW_DEBUG_LOGGER is None:
+def _setup_rgbw_functions():
+    """Setup RGBW functions - prefer C, fallback to Python"""
+    global _USE_C_RGBW
+    
+    try:
+        # Try to import C extension
+        from . import ledcontrol_rpi_ws281x_driver as c_driver
+        
+        # Test if C functions are available
+        test_rgb = c_driver.color_rgb_float()
+        test_rgb.r, test_rgb.g, test_rgb.b = 1.0, 0.5, 0.0
+        result = c_driver.mix_rgbw_advanced(test_rgb, 1.0, 6500.0, 3000.0)
+        
+        if hasattr(result, '__len__') and len(result) == 4:
+            _USE_C_RGBW = True
+            print("Using optimized C implementation for RGBW mixing (high performance)")
             return
-        _RGBW_DEBUG_COUNT += 1
-        _RGBW_DEBUG_LOGGER.info(
-            "%s | input_rgb=%s sat=%.3f bright=%.3f targetK=%s whiteK=%s -> floats=(%.3f, %.3f, %.3f, %.3f) -> packed_rgba=%s",
-            context,
-            tuple(round(c, 4) for c in source_rgb),
-            saturation,
-            brightness,
-            target_temp,
-            white_temp,
-            floats[0],
-            floats[1],
-            floats[2],
-            floats[3],
-            packed,
-        )
+    except (ImportError, AttributeError, TypeError) as e:
+        pass
+    
+    print("Using Python implementation for RGBW mixing")
 
-
-def color_temp_to_rgb(kelvin):
+# Python fallback implementations
+def _color_temp_to_rgb_python(kelvin):
     """Approximate conversion of color temperature (Kelvin) to RGB 0-255."""
     temp = kelvin / 100.0
 
@@ -239,25 +234,17 @@ def color_temp_to_rgb(kelvin):
     return (r, g, b)
 
 
-def _normalize_temp_rgb(kelvin):
+def _normalize_temp_rgb_python(kelvin):
     """Return normalized RGB (0..1) representation of a color temperature."""
-    rgb = color_temp_to_rgb(kelvin)
+    rgb = _color_temp_to_rgb_python(kelvin)
     max_channel = max(rgb)
     if max_channel <= 0:
         return (1.0, 1.0, 1.0)
     return tuple(channel / max_channel for channel in rgb)
 
 
-def _quantize_saturation(saturation):
-    """Clamp saturation to 0..1 and quantize to FastLED-style 0-255 scale."""
-    saturation = max(0.0, min(1.0, saturation))
-    sat_int = int(saturation * 255)
-    sat_factor = sat_int / 255.0
-    return sat_factor, sat_int
-
-
-def _mix_rgbw_advanced_scalar(rgb, sat_factor, target_temp, white_temp):
-    """Compute advanced RGBW mix for a single pixel in float space."""
+def _mix_rgbw_advanced_python(rgb, sat_factor, target_temp, white_temp):
+    """Compute advanced RGBW mix for a single pixel in float space (Python)."""
     r = max(0.0, min(1.0, rgb[0]))
     g = max(0.0, min(1.0, rgb[1]))
     b = max(0.0, min(1.0, rgb[2]))
@@ -275,12 +262,12 @@ def _mix_rgbw_advanced_scalar(rgb, sat_factor, target_temp, white_temp):
 
     neutral_strength = min_val + (1.0 - sat_factor) * chroma
 
-    target_norm = _normalize_temp_rgb(target_temp)
+    target_norm = _normalize_temp_rgb_python(target_temp)
     desired_r = color_r + target_norm[0] * neutral_strength
     desired_g = color_g + target_norm[1] * neutral_strength
     desired_b = color_b + target_norm[2] * neutral_strength
 
-    white_norm = _normalize_temp_rgb(white_temp)
+    white_norm = _normalize_temp_rgb_python(white_temp)
 
     candidates = []
     if white_norm[0] > 0:
@@ -302,6 +289,41 @@ def _mix_rgbw_advanced_scalar(rgb, sat_factor, target_temp, white_temp):
 
     return r_out, g_out, b_out, w
 
+
+# Wrapper functions that automatically use C or Python
+def _mix_rgbw_advanced_scalar(rgb, sat_factor, target_temp, white_temp):
+    """Mix RGBW (automatically uses C if available, else Python)."""
+    if _USE_C_RGBW:
+        from . import ledcontrol_rpi_ws281x_driver as c_driver
+        rgb_struct = c_driver.color_rgb_float()
+        rgb_struct.r, rgb_struct.g, rgb_struct.b = rgb[0], rgb[1], rgb[2]
+        return c_driver.mix_rgbw_advanced(rgb_struct, sat_factor, target_temp, white_temp)
+    else:
+        return _mix_rgbw_advanced_python(rgb, sat_factor, target_temp, white_temp)
+
+
+def _normalize_temp_rgb(kelvin):
+    """Normalize color temperature (automatically uses C if available)."""
+    if _USE_C_RGBW:
+        from . import ledcontrol_rpi_ws281x_driver as c_driver
+        rgb = c_driver.color_temp_to_rgb_normalized(kelvin)
+        return (rgb.r, rgb.g, rgb.b)
+    else:
+        return _normalize_temp_rgb_python(kelvin)
+
+
+def _quantize_saturation(saturation):
+    """Clamp saturation to 0..1 and quantize to FastLED-style 0-255 scale."""
+    saturation = max(0.0, min(1.0, saturation))
+    sat_int = int(saturation * 255)
+    sat_factor = sat_int / 255.0
+    return sat_factor, sat_int
+
+
+def color_temp_to_rgb(kelvin):
+    """Exposed for compatibility - uses Python version."""
+    return _color_temp_to_rgb_python(kelvin)
+
 # Get Pi version once at module import time
 pi_version = get_raspberry_pi_version()
 
@@ -320,6 +342,9 @@ if pi_version == 5:
         
         # Import NumPy for vectorized operations
         import numpy as np
+        
+        # Setup RGBW functions (try to use C, fallback to Python)
+        _setup_rgbw_functions()
         
         # Strip type constants (compatible with rpi_ws281x)
         WS2811_STRIP_RGB = 0x00100800
@@ -701,18 +726,6 @@ if pi_version == 5:
             g8 = scale_8(g8, corr_rgb[1])
             b8 = scale_8(b8, corr_rgb[2])
 
-            if _RGBW_DEBUG_LIMIT > 0:
-                _log_rgbw_debug(
-                    "scalar",
-                    source_rgb=rgb,
-                    saturation=saturation,
-                    brightness=brightness,
-                    target_temp=target_temp,
-                    white_temp=white_temp,
-                    floats=(r, g, b, w),
-                    packed=(r8, g8, b8, w8),
-                )
-            
             return pack_rgbw(r8, g8, b8, w8)
         
         # Render functions
@@ -942,19 +955,6 @@ if pi_version == 5:
                 b8 = np.clip(b * brightness * 255 * corr_rgb[2] / 255, 0, 255).astype(np.uint8)
                 w8 = np.clip(w * brightness * 255, 0, 255).astype(np.uint8)
 
-                if _RGBW_DEBUG_LIMIT > 0 and len(r) > 0:
-                    idx = 0
-                    _log_rgbw_debug(
-                        "vector",
-                        source_rgb=(float(rgb_array[idx, 0]), float(rgb_array[idx, 1]), float(rgb_array[idx, 2])),
-                        saturation=saturation,
-                        brightness=brightness,
-                        target_temp=target_temp,
-                        white_temp=white_temp,
-                        floats=(float(r[idx]), float(g[idx]), float(b[idx]), float(w[idx])),
-                        packed=(int(r8[idx]), int(g8[idx]), int(b8[idx]), int(w8[idx])),
-                    )
-                
                 # Batch set pixels using array method (FAST!)
                 try:
                     # Stack RGBW into single array: (n, 4)
@@ -1013,6 +1013,9 @@ elif pi_version == 3:
             ws2811_get_return_t_str, delete_ws2811_t
         )
         print("Using custom rpi_ws281x driver for Raspberry Pi 3/4 (PWM-based, high performance)")
+        
+        # Setup RGBW functions (try to use C, fallback to Python)
+        _setup_rgbw_functions()
         
         # Wrapper class using custom SWIG bindings
         class WS2811Wrapper:
@@ -1254,3 +1257,6 @@ else:
     # Non-Raspberry Pi system: Use simulation driver
     print("Non-Raspberry Pi system detected - using simulation mode")
     from .driver_non_raspberry_pi import WS2811Wrapper
+    
+    # Setup RGBW functions (Python only in simulation mode)
+    _setup_rgbw_functions()

@@ -161,4 +161,126 @@ float fbm_noise_3d(float x, float y, float z,
   return v / 2.0;
 }
 
+// =============================================================================
+// RGBW Color Temperature Utilities (optimized C implementations)
+// =============================================================================
+
+// Clamp helper
+static inline float clamp_float(float val, float min_val, float max_val) {
+  return fmaxf(min_val, fminf(max_val, val));
+}
+
+// Convert color temperature (Kelvin) to normalized RGB (0..1)
+// Based on Tanner Helland's algorithm
+static inline color_rgb_float color_temp_to_rgb_normalized(float kelvin) {
+  color_rgb_float result;
+  float temp = kelvin / 100.0f;
+
+  // Red channel
+  if (temp <= 66.0f) {
+    result.r = 1.0f;
+  } else {
+    float r = temp - 60.0f;
+    r = 329.698727446f * powf(r, -0.1332047592f);
+    result.r = clamp_float(r / 255.0f, 0.0f, 1.0f);
+  }
+
+  // Green channel
+  if (temp <= 66.0f && temp > 0.0f) {
+    float g = 99.4708025861f * logf(temp) - 161.1195681661f;
+    result.g = clamp_float(g / 255.0f, 0.0f, 1.0f);
+  } else if (temp > 66.0f) {
+    float g = temp - 60.0f;
+    g = 288.1221695283f * powf(g, -0.0755148492f);
+    result.g = clamp_float(g / 255.0f, 0.0f, 1.0f);
+  } else {
+    result.g = 0.0f;
+  }
+
+  // Blue channel
+  if (temp >= 66.0f) {
+    result.b = 1.0f;
+  } else if (temp <= 19.0f) {
+    result.b = 0.0f;
+  } else {
+    float b = temp - 10.0f;
+    b = 138.5177312231f * logf(b) - 305.0447927307f;
+    result.b = clamp_float(b / 255.0f, 0.0f, 1.0f);
+  }
+
+  // Normalize to max channel = 1.0
+  float max_channel = fmaxf(result.r, fmaxf(result.g, result.b));
+  if (max_channel > 0.0f) {
+    result.r /= max_channel;
+    result.g /= max_channel;
+    result.b /= max_channel;
+  } else {
+    result.r = result.g = result.b = 1.0f;
+  }
+
+  return result;
+}
+
+// Advanced RGBW mixing algorithm (single pixel, optimized C)
+// Separates chroma from neutral, maps neutral to target_temp, extracts white
+static inline color_rgbw_float mix_rgbw_advanced(color_rgb_float rgb, 
+                                                   float sat_factor,
+                                                   float target_temp,
+                                                   float white_temp) {
+  color_rgbw_float result;
+  
+  // Clamp input RGB to 0..1
+  float r = clamp_float(rgb.r, 0.0f, 1.0f);
+  float g = clamp_float(rgb.g, 0.0f, 1.0f);
+  float b = clamp_float(rgb.b, 0.0f, 1.0f);
+
+  // Handle zero case
+  float max_val = fmaxf(r, fmaxf(g, b));
+  if (max_val <= 0.0f) {
+    result.r = result.g = result.b = result.w = 0.0f;
+    return result;
+  }
+
+  float min_val = fminf(r, fminf(g, b));
+  float chroma = max_val - min_val;
+
+  // Separate chroma (colored component) with saturation
+  float color_r = (r - min_val) * sat_factor;
+  float color_g = (g - min_val) * sat_factor;
+  float color_b = (b - min_val) * sat_factor;
+
+  // Neutral component strength (increases when saturation decreases)
+  float neutral_strength = min_val + (1.0f - sat_factor) * chroma;
+
+  // Map neutral component to target color temperature
+  color_rgb_float target_norm = color_temp_to_rgb_normalized(target_temp);
+  float desired_r = color_r + target_norm.r * neutral_strength;
+  float desired_g = color_g + target_norm.g * neutral_strength;
+  float desired_b = color_b + target_norm.b * neutral_strength;
+
+  // Extract white channel using white LED temperature spectrum
+  color_rgb_float white_norm = color_temp_to_rgb_normalized(white_temp);
+  
+  // Find maximum white that can be extracted
+  float w = neutral_strength;  // Maximum possible white
+  if (white_norm.r > 0.0f) {
+    w = fminf(w, desired_r / white_norm.r);
+  }
+  if (white_norm.g > 0.0f) {
+    w = fminf(w, desired_g / white_norm.g);
+  }
+  if (white_norm.b > 0.0f) {
+    w = fminf(w, desired_b / white_norm.b);
+  }
+  w = clamp_float(w, 0.0f, neutral_strength);
+
+  // Subtract white contribution from RGB
+  result.r = fmaxf(0.0f, desired_r - w * white_norm.r);
+  result.g = fmaxf(0.0f, desired_g - w * white_norm.g);
+  result.b = fmaxf(0.0f, desired_b - w * white_norm.b);
+  result.w = w;
+
+  return result;
+}
+
 #endif
