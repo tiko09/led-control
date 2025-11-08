@@ -80,15 +80,23 @@ class ArtNetServer:
         self.log.info("ArtNet Server gestoppt")
 
     def _run(self):
+        self.log.info("ArtNet receiver thread started, waiting for packets...")
+        packet_count = 0
         while self._running.is_set():
             try:
                 pkt, addr = self._sock.recvfrom(2048)
+                packet_count += 1
                 
                 # Measure time between packets
                 now = time.time()
                 if self._last_packet_time is not None:
                     interval = now - self._last_packet_time
                     self._packet_intervals.append(interval)
+                    
+                    # Log every 100th packet immediately
+                    if packet_count % 100 == 0:
+                        self.log.info("📦 Received packet #%d, interval: %.3fms", packet_count, interval * 1000)
+                        
                 self._last_packet_time = now
                 
             except OSError:
@@ -120,6 +128,23 @@ class ArtNetServer:
                 "ArtNet Direkt angewandt: from=%s universe=%d seq=%d bytes=%d leds_updated=%d",
                 addr, universe, seq, len(data), leds
             )
+            
+            # Report packet timing statistics periodically
+            now = time.time()
+            if (now - self._debug_last_report) >= self._debug_interval_report:
+                if self._packet_intervals:
+                    avg_interval = sum(self._packet_intervals) / len(self._packet_intervals)
+                    min_interval = min(self._packet_intervals)
+                    max_interval = max(self._packet_intervals)
+                    estimated_fps = 1.0 / avg_interval if avg_interval > 0 else 0
+                    self.log.info("📊 Packet Timing: count=%d avg=%.3fms (%.1f FPS) min=%.3fms max=%.3fms",
+                                 len(self._packet_intervals),
+                                 avg_interval * 1000,
+                                 estimated_fps,
+                                 min_interval * 1000,
+                                 max_interval * 1000)
+                    self._packet_intervals = []
+                self._debug_last_report = now
 
     def _apply_dmx(self, data: bytes) -> int:
         group = self.group_size
