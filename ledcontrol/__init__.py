@@ -70,7 +70,7 @@ def main():
     if args.dev:
         # Development mode: use Flask-SocketIO's built-in server
         # Disable auto-reload to prevent settings loss and animation interruption
-        app.socketio.run(app, host=args.host, port=args.port, debug=True, use_reloader=False)
+        app.socketio.run(app, host=args.host, port=args.port, debug=True, use_reloader=False, allow_unsafe_werkzeug=True)
     else:
         # Production mode: Try to use eventlet or gevent for WebSocket support
         # Fall back to bjoern if neither is available (but WebSockets won't work)
@@ -79,7 +79,7 @@ def main():
             # Try eventlet first (recommended for Flask-SocketIO)
             import eventlet
             print(f"Starting server with eventlet (WebSocket support enabled)")
-            app.socketio.run(app, host=args.host, port=args.port)
+            app.socketio.run(app, host=args.host, port=args.port, allow_unsafe_werkzeug=True)
         except ImportError:
             try:
                 # Try gevent as fallback
@@ -88,7 +88,7 @@ def main():
                 import gevent.pywsgi
                 from geventwebsocket.handler import WebSocketHandler
                 print(f"Starting server with gevent (WebSocket support enabled)")
-                app.socketio.run(app, host=args.host, port=args.port)
+                app.socketio.run(app, host=args.host, port=args.port, allow_unsafe_werkzeug=True)
             except ImportError:
                 # Fall back to bjoern (no WebSocket support)
                 print("Warning: Neither eventlet nor gevent found. WebSocket features will not work.")
