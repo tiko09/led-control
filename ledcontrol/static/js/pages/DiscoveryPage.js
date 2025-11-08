@@ -1,8 +1,11 @@
 // led-control WS2812B LED Controller Server
 // Copyright 2025 jackw01. Released under the MIT License (see LICENSE for details).
 
+import SyncConfig from '../components/SyncConfig.js';
+
 export default {
   name: 'DiscoveryPage',
+  components: { SyncConfig },
   data() {
     return {
       devices: [],
@@ -591,6 +594,9 @@ export default {
       </div>
     </div>
   </div>
+  
+  <!-- Animation Synchronization Configuration -->
+  <sync-config></sync-config>
   
   <!-- Filter and Sync Controls -->
   <div class="card">
