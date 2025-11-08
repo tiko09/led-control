@@ -18,6 +18,7 @@ from ledcontrol.animationcontroller import AnimationController
 from ledcontrol.ledcontroller import LEDController
 from ledcontrol.homekit import homekit_start
 from ledcontrol.artnet_server import ArtNetServer
+from ledcontrol.sync_server import AnimationSyncServer
 from ledcontrol.led_visualizer import LEDVisualizer
 from ledcontrol.pi_discovery import PiDiscoveryService
 from ledcontrol.version import get_version_string, get_version_info
@@ -207,6 +208,10 @@ def create_app(led_count,
         "white_led_temperature": 5000,  # RGBW: White LED color temperature in Kelvin (2700-6500)
         "rgbw_algorithm": "legacy",  # RGBW: Algorithm for RGB->RGBW conversion ("legacy" or "advanced")
         "led_strip_type": led_pixel_order,  # Store LED strip type for frontend
+        # Animation sync settings
+        "enable_sync": False,  # Enable animation synchronization
+        "sync_master_mode": False,  # True = broadcast time, False = receive time
+        "sync_interval": 0.5,  # Sync broadcast interval in seconds
     }
     for k, v in config_defaults.items():
         settings.setdefault(k, v)
@@ -464,6 +469,10 @@ def create_app(led_count,
             "pi_device_name": settings.get("pi_device_name", ""),
             "pi_group": settings.get("pi_group", ""),
             "pi_master_mode": settings.get("pi_master_mode", False),
+            # Animation sync settings
+            "enable_sync": settings.get("enable_sync", False),
+            "sync_master_mode": settings.get("sync_master_mode", False),
+            "sync_interval": settings.get("sync_interval", 0.5),
             # RGBW settings (app-level)
             "use_white_channel": settings.get("use_white_channel", True),
             "white_led_temperature": settings.get("white_led_temperature", 5000),
@@ -537,6 +546,22 @@ def create_app(led_count,
             leds.getNrOfChannelsPerLed(),
             (512 - settings["artnet_channel_offset"]) // leds.getNrOfChannelsPerLed()
         )
+
+    # Animation Sync Server for master/slave synchronization
+    sync_server = None
+    if settings.get("enable_sync", False):
+        master_mode = settings.get("sync_master_mode", False)
+        sync_interval = settings.get("sync_interval", 0.5)  # 500ms default
+        
+        sync_server = AnimationSyncServer(
+            get_time_callback=controller.get_animation_time if master_mode else None,
+            set_time_callback=controller.set_animation_time if not master_mode else None,
+            master_mode=master_mode,
+            sync_interval=sync_interval
+        )
+        sync_server.start()
+        app.logger.info("🎬 Animation Sync started: mode=%s interval=%.1fs", 
+                       "MASTER" if master_mode else "SLAVE", sync_interval)
 
     # ArtNet POST (Kapazität prüfen nach Änderung):
     @app.post("/api/artnet")
@@ -628,6 +653,50 @@ def create_app(led_count,
         level = data.get("log_level", "INFO")
         settings["log_level"] = level
         set_log_level(level)
+        return {"status": "ok"}
+    
+    # Animation Sync API
+    @app.get("/api/sync")
+    def api_get_sync():
+        return {
+            "enable_sync": settings.get("enable_sync", False),
+            "sync_master_mode": settings.get("sync_master_mode", False),
+            "sync_interval": settings.get("sync_interval", 0.5),
+            "stats": sync_server.get_stats() if sync_server else None
+        }
+    
+    @app.post("/api/sync")
+    def api_set_sync():
+        nonlocal sync_server
+        data = request.get_json(force=True)
+        
+        # Update settings
+        settings["enable_sync"] = bool(data.get("enable_sync", False))
+        settings["sync_master_mode"] = bool(data.get("sync_master_mode", False))
+        settings["sync_interval"] = float(data.get("sync_interval", 0.5))
+        
+        # Stop existing sync server
+        if sync_server:
+            app.logger.debug("Stopping sync server for restart")
+            sync_server.stop()
+            sync_server = None
+        
+        # Start new sync server if enabled
+        if settings["enable_sync"]:
+            master_mode = settings["sync_master_mode"]
+            sync_server = AnimationSyncServer(
+                get_time_callback=controller.get_animation_time if master_mode else None,
+                set_time_callback=controller.set_animation_time if not master_mode else None,
+                master_mode=master_mode,
+                sync_interval=settings["sync_interval"]
+            )
+            sync_server.start()
+            app.logger.info("🎬 Animation Sync %s: interval=%.1fs", 
+                           "MASTER" if master_mode else "SLAVE", 
+                           settings["sync_interval"])
+        else:
+            app.logger.debug("Animation Sync disabled")
+        
         return {"status": "ok"}
     
     # ============================================================================

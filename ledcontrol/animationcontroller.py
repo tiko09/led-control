@@ -97,6 +97,7 @@ class AnimationController:
         # Prepare to start
         self.reset_timer()
         self._time = 0
+        self._time_override = None  # For slave sync mode
         self._update_needed = True # Is the LED state going to change this frame?
         self._force_next_update = False # Force one more update even for static patterns
 
@@ -331,6 +332,14 @@ class AnimationController:
     def get_frame_rate(self):
         'Get frame rate'
         return self._timer.get_rate()
+    
+    def get_animation_time(self) -> float:
+        'Get current animation time for sync (master mode)'
+        return self._time
+    
+    def set_animation_time(self, sync_time: float):
+        'Set animation time from sync packet (slave mode)'
+        self._time_override = sync_time
 
     def _check_reset_animation_state(self):
         'Reset animation timer if allowed by configuration flag'
@@ -344,7 +353,14 @@ class AnimationController:
     def update_leds(self):
         'Determine time, render frame, and display'
         last_t = self._time
-        self._time = self._timer.last_start - self._start
+        
+        # Use synced time if available (slave mode), otherwise calculate locally
+        if self._time_override is not None:
+            self._time = self._time_override
+            self._time_override = None  # Reset after use
+        else:
+            self._time = self._timer.last_start - self._start
+            
         delta_t = self._time - last_t
 
         if self._timer.get_count() % 100 == 0:
