@@ -407,17 +407,6 @@ class AnimationController:
                     self._prev_state[range_start:range_end] = state
 
                     # Debug: Log RGBW settings every 100 frames
-                    if hasattr(self, '_debug_frame_count'):
-                        self._debug_frame_count += 1
-                    else:
-                        self._debug_frame_count = 0
-                    
-                    if self._debug_frame_count % 100 == 0:
-                        logger.info(f"RGBW Settings: algorithm={self._settings.get('rgbw_algorithm', 'legacy')}, "
-                                   f"white_temp={self._settings.get('white_led_temperature', 5000)}, "
-                                   f"target_temp={self._settings.get('global_color_temp', 6500)}, "
-                                   f"use_white={self._settings.get('use_white_channel', True)}")
-
                     self._led_controller.set_range(
                         state,
                         range_start,
