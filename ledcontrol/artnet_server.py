@@ -47,6 +47,11 @@ class ArtNetServer:
         self._fps_last_report = self._fps_start
         self._fps_count = 0
         self._fps_report_interval = 10.0  # Sekunden
+        # Timing debug
+        self._last_packet_time = None
+        self._packet_intervals = []
+        self._debug_interval_report = 5.0  # Report every 5 seconds
+        self._debug_last_report = time.time()
 
     def start(self):
         if self._thread and self._thread.is_alive():
@@ -78,6 +83,14 @@ class ArtNetServer:
         while self._running.is_set():
             try:
                 pkt, addr = self._sock.recvfrom(2048)
+                
+                # Measure time between packets
+                now = time.time()
+                if self._last_packet_time is not None:
+                    interval = now - self._last_packet_time
+                    self._packet_intervals.append(interval)
+                self._last_packet_time = now
+                
             except OSError:
                 if not self._running.is_set():
                     break
@@ -237,6 +250,23 @@ class ArtNetServer:
         # FPS
         self._fps_count += 1
         now = time.time()
+        
+        # Debug: Report packet timing statistics every 5 seconds
+        if (now - self._debug_last_report) >= self._debug_interval_report:
+            if self._packet_intervals:
+                avg_interval = sum(self._packet_intervals) / len(self._packet_intervals)
+                min_interval = min(self._packet_intervals)
+                max_interval = max(self._packet_intervals)
+                estimated_fps = 1.0 / avg_interval if avg_interval > 0 else 0
+                self.log.info("📊 Packet Timing: count=%d avg=%.3fms (%.1f FPS) min=%.3fms max=%.3fms",
+                             len(self._packet_intervals),
+                             avg_interval * 1000,
+                             estimated_fps,
+                             min_interval * 1000,
+                             max_interval * 1000)
+                self._packet_intervals = []
+            self._debug_last_report = now
+        
         if (now - self._fps_last_report) >= self._fps_report_interval:
             total_elapsed = now - self._fps_start
             avg_fps_total = self._fps_count / total_elapsed if total_elapsed > 0 else 0.0
